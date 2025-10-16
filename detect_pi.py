@@ -54,6 +54,10 @@ def main():
             frame_bgr = req.make_array("main")   # 已经是 BGR888，不需要再转换
             req.release()
 
+            cv2.imwrite("/home/pi/test_capture.jpg", frame_bgr)
+            print("✅ Saved /home/pi/test_capture.jpg, shape:", frame_bgr.shape)
+            break   # <-- 只抓一帧就退出，避免连拍
+
             # 4) 推理只做一次“BGR->RGB + resize”
             infer_in = cv2.resize(frame_bgr, (args.imgsz, args.imgsz), interpolation=cv2.INTER_LINEAR)
             infer_in = cv2.cvtColor(infer_in, cv2.COLOR_BGR2RGB)  # YOLO 习惯 RGB
@@ -97,3 +101,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
