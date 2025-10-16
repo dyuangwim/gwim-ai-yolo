@@ -1,4 +1,5 @@
-# detect_pi.py — COLOR-SAFE BASELINE (no AE/AWB/ColourGains hacks, single stream)
+# detect_pi.py — COLOR-PURE & NO-BLACK-SCREEN BASELINE
+# 只开默认 AE/AWB，不写任何曝光/白平衡/帧时长；单流 BGR888，绝不改色链路。
 import os, time, argparse
 from datetime import datetime
 import cv2
@@ -28,28 +29,34 @@ def main():
     args = parse_args()
     ensure_dir(args.save_dir)
 
+    # 1) 只开主流 BGR888（OpenCV 原生），让 ISP + AE/AWB 全自动
     picam2 = Picamera2()
-    # 只用主流，RGB888，完全交给 ISP + 默认 AE/AWB，颜色最“原生”
     config = picam2.create_video_configuration(
-        main={"size": (1280, 960), "format": "RGB888"},
+        main={"size": (1280, 960), "format": "BGR888"},   # 4:3；你也可改成 (1280, 720)
         controls={"AeEnable": True, "AwbEnable": True}
     )
     picam2.configure(config)
     picam2.start()
-    time.sleep(1.0)  # 让 AE/AWB 收敛
+    time.sleep(1.0)  # 给 AE/AWB 一点时间收敛
 
+    # 2) 模型
     model = YOLO(args.weights)
+
     last_save = 0
     fps_hist = []
 
     try:
         while True:
             t0 = time.time()
-            frame_rgb = picam2.capture_array("main")  # RGB888
-            frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)  # OpenCV 用 BGR
 
-            # 推理用缩放后的副本（避免引入额外色彩转换）
+            # 3) 直接拿 BGR888 给 OpenCV 显示
+            req = picam2.capture_request()
+            frame_bgr = req.make_array("main")   # 已经是 BGR888，不需要再转换
+            req.release()
+
+            # 4) 推理只做一次“BGR->RGB + resize”
             infer_in = cv2.resize(frame_bgr, (args.imgsz, args.imgsz), interpolation=cv2.INTER_LINEAR)
+            infer_in = cv2.cvtColor(infer_in, cv2.COLOR_BGR2RGB)  # YOLO 习惯 RGB
             r = model.predict(source=infer_in, imgsz=args.imgsz, conf=args.conf, verbose=False)[0]
 
             h, w = frame_bgr.shape[:2]
@@ -80,7 +87,7 @@ def main():
                 last_save=now
 
             if not args.headless:
-                cv2.imshow("Battery Detection — COLOR SAFE", frame_bgr)
+                cv2.imshow("Battery Detection — COLOR PURE", frame_bgr)
                 if cv2.waitKey(1) & 0xFF == 27: break
 
     except KeyboardInterrupt:
