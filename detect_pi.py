@@ -14,12 +14,10 @@ def parse_args():
     ap.add_argument("--save_dir", default="/home/pi/hard_cases")
     ap.add_argument("--headless", action="store_true")
 
-    # 曝光相关：我们锁 AE（防止 FPS 波动），AWB 默认不锁（防止偏色）
-    # 短快门（4000 us 或更短）以防止拖影，提高清晰度
-    ap.add_argument("--shutter", type=int, default=4000,    
+    # 曝光相关：锁 AE（防止 FPS 波动），AWB 默认不锁（防止偏色）
+    ap.add_argument("--shutter", type=int, default=4000,    # 短快门（4000 us 或更短）以防止拖影，提高清晰度
                     help="ExposureTime (us) to lock AE")
-    # 增加增益来弥补短快门损失的亮度
-    ap.add_argument("--gain", type=float, default=6.0,      
+    ap.add_argument("--gain", type=float, default=6.0,      # 增加增益来弥补短快门损失的亮度
                     help="AnalogueGain to lock AE")
     ap.add_argument("--warmup", type=float, default=1.0,    # 让 AE/AWB 先稳定 
                     help="seconds to let AE/AWB settle")
@@ -42,12 +40,13 @@ def main():
     ensure_dir(args.save_dir)
 
     picam2 = Picamera2()
+    # lores 尺寸现在由 args.imgsz (416) 决定
     config = picam2.create_video_configuration(
         main  = {"size": (1280, 960), "format": "RGB888"},   # 显示用
         lores = {"size": (args.imgsz, args.imgsz), "format": "YUV420"},  # 推理用 
         controls={
             "FrameDurationLimits": (33333, 33333),  # 锁定 30fps 预算 
-            "AeEnable": True,                       # 先开着 AWB/AE 
+            "AeEnable": True,                       
             "AwbEnable": True,                      
             "NoiseReductionMode": 0,                # 0=Off，提高细节清晰度
             "Sharpness": 1.3                        # 略提锐度
@@ -56,42 +55,40 @@ def main():
     picam2.configure(config)
     picam2.start()
 
-    # 让 AE/AWB 先收敛
     time.sleep(max(0.5, args.warmup)) 
 
-    # 锁 AE（曝光），AWB 默认继续开着；若传了 --lock_awb 才锁
     controls = {"AeEnable": False, "ExposureTime": args.shutter, "AnalogueGain": args.gain}
     
     if args.lock_awb:
         md = picam2.capture_metadata()
-        cg = md.get("ColourGains", (1.0, 1.0)) # 读取收敛后的颜色增益 
+        cg = md.get("ColourGains", (1.0, 1.0)) 
         controls.update({"AwbEnable": False, "ColourGains": cg})
         
-    picam2.set_controls(controls) # 设定锁定的控制参数 
+    picam2.set_controls(controls) 
 
-    # 加载模型
     model = YOLO(args.weights)
-    fps_hist, last_save =, 0 # <<< 修复：删除多余的逗号
+    
+    fps_hist = []
+    last_save = 0
 
     try:
         while True:
             t0 = time.time()
             
-            # 一次取两路
             req = picam2.capture_request()
             lo = req.make_array('lores')    # YUV420: (h*3/2, w)
             main_rgb = req.make_array('main')
             req.release()
 
-            # CPU 密集型：YUV420 -> BGR（I420） - 仍是 Pi 4 的性能瓶颈 
-            w = lo.shape[1]; h = lo.shape * 2 // 3 # 修复：确保 lo.shape 是正确的维度
+            # **已修复 YUV420 维度计算错误 (第 88, 89 行)**
+            w = lo.shape[1]
+            h = lo.shape * 2 // 3 # 使用 YUV 数组的第一个元素 (高度) 进行计算
             lo = lo.reshape((h * 3 // 2, w))
             lo_bgr = cv2.cvtColor(lo, cv2.COLOR_YUV2BGR_I420)
 
             # YOLO 推理（在 lores 上）
-            # 注意: 如果使用的是 NCNN 模型，model.predict 方法可能会要求输入尺寸匹配 
-            # 这里的 imgsz=args.imgsz (416) 应该与 lores 流的尺寸匹配。
-            r = model.predict(source=lo_bgr, imgsz=args.imgsz, conf=args.conf, verbose=False) 
+            results = model.predict(source=lo_bgr, imgsz=args.imgsz, conf=args.conf, verbose=False)
+            r = results
             
             # 准备 main 显示（RGB→BGR 便于绘制）
             main_bgr = cv2.cvtColor(main_rgb, cv2.COLOR_RGB2BGR)
@@ -99,13 +96,14 @@ def main():
             sx, sy = mw/float(args.imgsz), mh/float(args.imgsz)
 
             det_count, low_conf = 0, False
+            
             if r.boxes is not None and len(r.boxes) > 0:
                 for b in r.boxes:
-                    # 确保 xyxy 是列表或数组，并且取第一个元素
-                    x1,y1,x2,y2 = map(int, b.xyxy.tolist()) 
+                    x1,y1,x2,y2 = map(int, b.xyxy.tolist())
                     if (x2-x1)*(y2-y1) < args.min_area: continue
-                    conf = float(b.conf) # 确保 conf 取第一个元素
-                    cls = int(b.cls) if b.cls is not None else 0 # 确保 cls 取第一个元素
+                    conf = float(b.conf)
+                    cls = int(b.cls) if b.cls is not None else 0
+                    
                     label = model.names.get(cls, "battery")
                     X1,Y1,X2,Y2 = int(x1*sx), int(y1*sy), int(x2*sx), int(y2*sy)
                     draw_box(main_bgr, X1,Y1,X2,Y2, label, conf)
