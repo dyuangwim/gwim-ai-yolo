@@ -1,5 +1,5 @@
-# detect_pi.py — COLOR-PURE & NO-BLACK-SCREEN BASELINE
-# 只开默认 AE/AWB，不写任何曝光/白平衡/帧时长；单流 BGR888，绝不改色链路。
+# detect_pi.py — RGB-first color fix (Picamera2 -> OpenCV)
+# 统一使用 RGB888 采集；推理用 RGB；显示/保存时再转 BGR，一次到位，不再偏紫。
 import os, time, argparse
 from datetime import datetime
 import cv2
@@ -18,28 +18,28 @@ def parse_args():
 
 def ensure_dir(p): os.makedirs(p, exist_ok=True)
 
-def draw_box(img, x1, y1, x2, y2, label, conf):
-    cv2.rectangle(img, (x1,y1), (x2,y2), (0,255,0), 2)
+def draw_box_bgr(img_bgr, x1, y1, x2, y2, label, conf):
+    cv2.rectangle(img_bgr, (x1,y1), (x2,y2), (0,255,0), 2)
     txt=f"{label} {conf:.2f}"
     (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-    cv2.rectangle(img, (x1, y1-th-6), (x1+tw+4, y1), (0,255,0), -1)
-    cv2.putText(img, txt, (x1+2, y1-4), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
+    cv2.rectangle(img_bgr, (x1, y1-th-6), (x1+tw+4, y1), (0,255,0), -1)
+    cv2.putText(img_bgr, txt, (x1+2, y1-4), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
 
 def main():
     args = parse_args()
     ensure_dir(args.save_dir)
 
-    # 1) 只开主流 BGR888（OpenCV 原生），让 ISP + AE/AWB 全自动
+    # 1) 只用 RGB888；让 AE/AWB 全自动（与 rpicam-hello 一致）
     picam2 = Picamera2()
     config = picam2.create_video_configuration(
-        main={"size": (1280, 960), "format": "BGR888"},   # 4:3；你也可改成 (1280, 720)
+        main={"size": (1280, 960), "format": "RGB888"},
         controls={"AeEnable": True, "AwbEnable": True}
     )
     picam2.configure(config)
     picam2.start()
-    time.sleep(1.0)  # 给 AE/AWB 一点时间收敛
+    time.sleep(1.0)  # 让 AE/AWB 收敛
 
-    # 2) 模型
+    # 2) YOLO
     model = YOLO(args.weights)
 
     last_save = 0
@@ -49,49 +49,52 @@ def main():
         while True:
             t0 = time.time()
 
-            # 3) 直接拿 BGR888 给 OpenCV 显示
-            req = picam2.capture_request()
-            frame_bgr = req.make_array("main")   # 已经是 BGR888，不需要再转换
-            req.release()
+            # 3) 直接取 RGB888 帧（Picamera2 会给 RGB）
+            #    注意：不要把它当 BGR 用！推理用它本身；显示/保存再转 BGR。
+            frame_rgb = picam2.capture_array("main")  # shape: (H, W, 3) RGB
 
-            cv2.imwrite("/home/pi/test_capture.jpg", frame_bgr)
-            print("✅ Saved /home/pi/test_capture.jpg, shape:", frame_bgr.shape)
-            break   # <-- 只抓一帧就退出，避免连拍
+            # 4) 推理：RGB -> resize（YOLO吃RGB，刚好省一次色彩转换）
+            infer_in = cv2.resize(frame_rgb, (args.imgsz, args.imgsz),
+                                  interpolation=cv2.INTER_LINEAR)
+            r = model.predict(source=infer_in, imgsz=args.imgsz,
+                              conf=args.conf, verbose=False)[0]
 
-            # 4) 推理只做一次“BGR->RGB + resize”
-            infer_in = cv2.resize(frame_bgr, (args.imgsz, args.imgsz), interpolation=cv2.INTER_LINEAR)
-            infer_in = cv2.cvtColor(infer_in, cv2.COLOR_BGR2RGB)  # YOLO 习惯 RGB
-            r = model.predict(source=infer_in, imgsz=args.imgsz, conf=args.conf, verbose=False)[0]
+            # 5) 显示/画框：先把整帧转成 BGR 再画（OpenCV 用 BGR）
+            frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
 
             h, w = frame_bgr.shape[:2]
-            sx = w / float(args.imgsz); sy = h / float(args.imgsz)
+            sx = w / float(args.imgsz)
+            sy = h / float(args.imgsz)
 
             det_count, low_conf = 0, False
             if r.boxes is not None and len(r.boxes) > 0:
                 for b in r.boxes:
                     x1,y1,x2,y2 = map(int, b.xyxy[0].tolist())
-                    if (x2-x1)*(y2-y1) < args.min_area: continue
+                    if (x2-x1)*(y2-y1) < args.min_area:
+                        continue
                     conf = float(b.conf[0])
                     cls_id = int(b.cls[0]) if b.cls is not None else 0
                     label = r.names.get(cls_id, "battery")
+
                     X1,Y1,X2,Y2 = int(x1*sx), int(y1*sy), int(x2*sx), int(y2*sy)
-                    draw_box(frame_bgr, X1,Y1,X2,Y2, label, conf)
+                    draw_box_bgr(frame_bgr, X1,Y1,X2,Y2, label, conf)
                     det_count += 1
                     if conf < (args.conf + 0.10): low_conf = True
 
             dt = (time.time()-t0)*1000.0
-            fps_hist.append(1000.0/max(dt,1.0));  fps_hist = fps_hist[-30:]
+            fps_hist.append(1000.0/max(dt,1.0)); fps_hist = fps_hist[-30:]
             hud=f"Detections:{det_count} | {dt:.1f} ms ({sum(fps_hist)/len(fps_hist):.1f} FPS)"
             cv2.putText(frame_bgr, hud, (10,28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
 
-            # 低置信或无检出，保存硬样本
+            # 6) 低置信或未检出时抓 hard case（保存 BGR）
             now=time.time()
             if (det_count==0 or low_conf) and (now-last_save>1.0):
-                cv2.imwrite(os.path.join(args.save_dir, f"hard_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"), frame_bgr)
+                fn=f"hard_{det_count}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
+                cv2.imwrite(os.path.join(args.save_dir, fn), frame_bgr)
                 last_save=now
 
             if not args.headless:
-                cv2.imshow("Battery Detection — COLOR PURE", frame_bgr)
+                cv2.imshow("Battery Detection — RGB path fixed", frame_bgr)
                 if cv2.waitKey(1) & 0xFF == 27: break
 
     except KeyboardInterrupt:
@@ -101,4 +104,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
