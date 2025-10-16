@@ -1,5 +1,4 @@
-# detect_pi.py  — Pi Camera v3 / Picamera2 + Ultralytics YOLO
-# 目标：稳定帧率、不偏色、在 lores 跑推理、在 main 高分辨显示框
+# detect_pi.py — COLOR-SAFE BASELINE (no AE/AWB/ColourGains hacks, single stream)
 import os, time, argparse
 from datetime import datetime
 import cv2
@@ -14,15 +13,6 @@ def parse_args():
     ap.add_argument("--min_area", type=int, default=1800)
     ap.add_argument("--save_dir", default="/home/pi/hard_cases")
     ap.add_argument("--headless", action="store_true")
-
-    # 曝光相关（单位：微秒 / 倍数），建议配合补光
-    ap.add_argument("--shutter", type=int, default=6000)   # 1/166s
-    ap.add_argument("--gain", type=float, default=4.0)
-
-    # 画面稳定：预热时长；是否锁AWB
-    ap.add_argument("--warmup", type=float, default=1.2)
-    ap.add_argument("--lock-awb", action="store_true",
-                    help="仅当元数据存在有效 ColourGains 时才锁定白平衡；默认不锁以避免偏色")
     return ap.parse_args()
 
 def ensure_dir(p): os.makedirs(p, exist_ok=True)
@@ -39,111 +29,64 @@ def main():
     ensure_dir(args.save_dir)
 
     picam2 = Picamera2()
-    # main 用 BGR888（OpenCV 直用），lores 用 YUV420 做推理
+    # 只用主流，RGB888，完全交给 ISP + 默认 AE/AWB，颜色最“原生”
     config = picam2.create_video_configuration(
-        main  = {"size": (1280, 960), "format": "BGR888"},
-        lores = {"size": (args.imgsz, args.imgsz), "format": "YUV420"},
-        controls={
-            # 锁帧间隔 ~30fps；AE先开着预热
-            "FrameDurationLimits": (33333, 33333),
-            "AeEnable": True,
-            "AwbEnable": True
-        }
+        main={"size": (1280, 960), "format": "RGB888"},
+        controls={"AeEnable": True, "AwbEnable": True}
     )
     picam2.configure(config)
     picam2.start()
-
-    # 让 AE/AWB 收敛
-    time.sleep(max(0.5, args.warmup))
-
-    # 只锁 AE（避免亮度忽明忽暗），AWB 默认不锁以避免偏色
-    md = picam2.capture_metadata()
-    controls = {
-        "AeEnable": False,
-        "ExposureTime": args.shutter,
-        "AnalogueGain": args.gain,
-        # AwbEnable 继续 True：不锁白平衡最安全
-        "AwbEnable": True
-    }
-
-    # 若用户强制要求锁 AWB，且元数据里拿到了有效的 ColourGains，才上锁
-    if args.lock_awb:
-        cg = md.get("ColourGains", None)
-        if isinstance(cg, tuple) and len(cg) == 2 and cg[0] > 0.1 and cg[1] > 0.1:
-            controls["AwbEnable"] = False
-            controls["ColourGains"] = cg
-            print(f"[i] Lock AWB with ColourGains={cg}")
-        else:
-            print("[i] Skip AWB lock: valid ColourGains not found in metadata")
-
-    picam2.set_controls(controls)
+    time.sleep(1.0)  # 让 AE/AWB 收敛
 
     model = YOLO(args.weights)
-    fps_hist, last_save = [], 0
+    last_save = 0
+    fps_hist = []
 
     try:
         while True:
             t0 = time.time()
-            req = picam2.capture_request()
-            lo = req.make_array('lores')      # YUV420 (I420)
-            main_bgr = req.make_array('main') # 已是 BGR888
-            req.release()
+            frame_rgb = picam2.capture_array("main")  # RGB888
+            frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)  # OpenCV 用 BGR
 
-            # lores: YUV420 → BGR（I420）
-            lo_w = lo.shape[1]
-            lo_h = lo.shape[0] * 2 // 3
-            lo = lo.reshape((lo_h * 3 // 2, lo_w))
-            lo_bgr = cv2.cvtColor(lo, cv2.COLOR_YUV2BGR_I420)
+            # 推理用缩放后的副本（避免引入额外色彩转换）
+            infer_in = cv2.resize(frame_bgr, (args.imgsz, args.imgsz), interpolation=cv2.INTER_LINEAR)
+            r = model.predict(source=infer_in, imgsz=args.imgsz, conf=args.conf, verbose=False)[0]
 
-            # YOLO 在 lores 上推理
-            r = model.predict(source=lo_bgr, imgsz=args.imgsz, conf=args.conf, verbose=False)[0]
-
-            mh, mw = main_bgr.shape[:2]
-            sx = mw / float(args.imgsz)
-            sy = mh / float(args.imgsz)
+            h, w = frame_bgr.shape[:2]
+            sx = w / float(args.imgsz); sy = h / float(args.imgsz)
 
             det_count, low_conf = 0, False
             if r.boxes is not None and len(r.boxes) > 0:
                 for b in r.boxes:
-                    x1, y1, x2, y2 = map(int, b.xyxy[0].tolist())
-                    if (x2-x1)*(y2-y1) < args.min_area:
-                        continue
+                    x1,y1,x2,y2 = map(int, b.xyxy[0].tolist())
+                    if (x2-x1)*(y2-y1) < args.min_area: continue
                     conf = float(b.conf[0])
                     cls_id = int(b.cls[0]) if b.cls is not None else 0
-                    label = model.names.get(cls_id, "battery")
-
-                    # lores → main 映射
-                    X1, Y1 = int(x1*sx), int(y1*sy)
-                    X2, Y2 = int(x2*sx), int(y2*sy)
-                    draw_box(main_bgr, X1, Y1, X2, Y2, label, conf)
+                    label = r.names.get(cls_id, "battery")
+                    X1,Y1,X2,Y2 = int(x1*sx), int(y1*sy), int(x2*sx), int(y2*sy)
+                    draw_box(frame_bgr, X1,Y1,X2,Y2, label, conf)
                     det_count += 1
-                    if conf < (args.conf + 0.10):
-                        low_conf = True
+                    if conf < (args.conf + 0.10): low_conf = True
 
-            infer_ms = (time.time() - t0) * 1000.0
-            fps_hist.append(1000.0 / max(1.0, infer_ms))
-            if len(fps_hist) > 30: fps_hist.pop(0)
+            dt = (time.time()-t0)*1000.0
+            fps_hist.append(1000.0/max(dt,1.0));  fps_hist = fps_hist[-30:]
+            hud=f"Detections:{det_count} | {dt:.1f} ms ({sum(fps_hist)/len(fps_hist):.1f} FPS)"
+            cv2.putText(frame_bgr, hud, (10,28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
 
-            hud = f"Detections: {det_count} | {inferencia:=infer_ms:.1f} ms ({sum(fps_hist)/len(fps_hist):.1f} FPS avg)"
-            cv2.putText(main_bgr, hud, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
-
-            # 回捞 hard cases（低置信或未检出）
-            now = time.time()
-            if (det_count == 0 or low_conf) and (now - last_save > 1.0):
-                fn = f"hard_{det_count}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
-                cv2.imwrite(os.path.join(args.save_dir, fn), main_bgr)
-                last_save = now
+            # 低置信或无检出，保存硬样本
+            now=time.time()
+            if (det_count==0 or low_conf) and (now-last_save>1.0):
+                cv2.imwrite(os.path.join(args.save_dir, f"hard_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"), frame_bgr)
+                last_save=now
 
             if not args.headless:
-                cv2.imshow("Battery Detection (Pi dual-stream)", main_bgr)
-                # 让窗口自适应，减少拉伸造成的观感偏差
-                cv2.waitKey(1)  # Esc 退出在终端处理 Ctrl+C 即可
+                cv2.imshow("Battery Detection — COLOR SAFE", frame_bgr)
+                if cv2.waitKey(1) & 0xFF == 27: break
 
     except KeyboardInterrupt:
         pass
     finally:
-        picam2.stop()
-        cv2.destroyAllWindows()
+        picam2.stop(); cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()
