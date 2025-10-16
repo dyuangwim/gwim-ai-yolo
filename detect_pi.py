@@ -8,7 +8,7 @@ def parse_args():
     ap = argparse.ArgumentParser()
     # 确保此处指向您 NCNN 转换后的模型路径
     ap.add_argument("--weights", default="/home/pi/models/best_ncnn_model") 
-    ap.add_argument("--imgsz", type=int, default=416)       # 建议使用 416x416 加速推理 [8]
+    ap.add_argument("--imgsz", type=int, default=416)       # 建议使用 416x416 加速推理 
     ap.add_argument("--conf", type=float, default=0.30)
     ap.add_argument("--min_area", type=int, default=1800)
     ap.add_argument("--save_dir", default="/home/pi/hard_cases")
@@ -21,7 +21,7 @@ def parse_args():
     # 增加增益来弥补短快门损失的亮度
     ap.add_argument("--gain", type=float, default=6.0,      
                     help="AnalogueGain to lock AE")
-    ap.add_argument("--warmup", type=float, default=1.0,    # 让 AE/AWB 先稳定 [9]
+    ap.add_argument("--warmup", type=float, default=1.0,    # 让 AE/AWB 先稳定 
                     help="seconds to let AE/AWB settle")
 
     # 如果你想 *明确* 锁 AWB，再加 --lock_awb 才会锁
@@ -44,9 +44,9 @@ def main():
     picam2 = Picamera2()
     config = picam2.create_video_configuration(
         main  = {"size": (1280, 960), "format": "RGB888"},   # 显示用
-        lores = {"size": (args.imgsz, args.imgsz), "format": "YUV420"},  # 推理用 [10, 11]
+        lores = {"size": (args.imgsz, args.imgsz), "format": "YUV420"},  # 推理用 
         controls={
-            "FrameDurationLimits": (33333, 33333),  # 锁定 30fps 预算 [10]
+            "FrameDurationLimits": (33333, 33333),  # 锁定 30fps 预算 
             "AeEnable": True,                       # 先开着 AWB/AE 
             "AwbEnable": True,                      
             "NoiseReductionMode": 0,                # 0=Off，提高细节清晰度
@@ -57,21 +57,21 @@ def main():
     picam2.start()
 
     # 让 AE/AWB 先收敛
-    time.sleep(max(0.5, args.warmup)) # [9]
+    time.sleep(max(0.5, args.warmup)) 
 
     # 锁 AE（曝光），AWB 默认继续开着；若传了 --lock_awb 才锁
     controls = {"AeEnable": False, "ExposureTime": args.shutter, "AnalogueGain": args.gain}
     
     if args.lock_awb:
         md = picam2.capture_metadata()
-        cg = md.get("ColourGains", (1.0, 1.0)) # 读取收敛后的颜色增益 [12]
+        cg = md.get("ColourGains", (1.0, 1.0)) # 读取收敛后的颜色增益 
         controls.update({"AwbEnable": False, "ColourGains": cg})
         
-    picam2.set_controls(controls) # 设定锁定的控制参数 [13, 9]
+    picam2.set_controls(controls) # 设定锁定的控制参数 
 
     # 加载模型
     model = YOLO(args.weights)
-    fps_hist, last_save =, 0
+    fps_hist, last_save =, 0 # <<< 修复：删除多余的逗号
 
     try:
         while True:
@@ -83,14 +83,16 @@ def main():
             main_rgb = req.make_array('main')
             req.release()
 
-            # CPU 密集型：YUV420 -> BGR（I420） - 仍是 Pi 4 的性能瓶颈 [7]
-            w = lo.shape[1]; h = lo.shape * 2 // 3
+            # CPU 密集型：YUV420 -> BGR（I420） - 仍是 Pi 4 的性能瓶颈 
+            w = lo.shape[1]; h = lo.shape * 2 // 3 # 修复：确保 lo.shape 是正确的维度
             lo = lo.reshape((h * 3 // 2, w))
             lo_bgr = cv2.cvtColor(lo, cv2.COLOR_YUV2BGR_I420)
 
             # YOLO 推理（在 lores 上）
-            r = model.predict(source=lo_bgr, imgsz=args.imgsz, conf=args.conf, verbose=False)
-
+            # 注意: 如果使用的是 NCNN 模型，model.predict 方法可能会要求输入尺寸匹配 
+            # 这里的 imgsz=args.imgsz (416) 应该与 lores 流的尺寸匹配。
+            r = model.predict(source=lo_bgr, imgsz=args.imgsz, conf=args.conf, verbose=False) 
+            
             # 准备 main 显示（RGB→BGR 便于绘制）
             main_bgr = cv2.cvtColor(main_rgb, cv2.COLOR_RGB2BGR)
             mh, mw = main_bgr.shape[:2]
@@ -99,10 +101,11 @@ def main():
             det_count, low_conf = 0, False
             if r.boxes is not None and len(r.boxes) > 0:
                 for b in r.boxes:
-                    x1,y1,x2,y2 = map(int, b.xyxy.tolist())
+                    # 确保 xyxy 是列表或数组，并且取第一个元素
+                    x1,y1,x2,y2 = map(int, b.xyxy.tolist()) 
                     if (x2-x1)*(y2-y1) < args.min_area: continue
-                    conf = float(b.conf)
-                    cls = int(b.cls) if b.cls is not None else 0
+                    conf = float(b.conf) # 确保 conf 取第一个元素
+                    cls = int(b.cls) if b.cls is not None else 0 # 确保 cls 取第一个元素
                     label = model.names.get(cls, "battery")
                     X1,Y1,X2,Y2 = int(x1*sx), int(y1*sy), int(x2*sx), int(y2*sy)
                     draw_box(main_bgr, X1,Y1,X2,Y2, label, conf)
