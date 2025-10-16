@@ -1,5 +1,4 @@
-# detect_pi.py — FINAL: Trust-BGR path (no color conversion)
-# 采集即 BGR；推理/显示/保存全程 BGR，不再做 RGB<->BGR 转换。
+# detect_pi.py — FINAL (BGR-trusted; with --force-rgb switch)
 import os, time, argparse
 from datetime import datetime
 import cv2
@@ -14,9 +13,10 @@ def parse_args():
     ap.add_argument("--min_area", type=int, default=1800)
     ap.add_argument("--save_dir", default="/home/pi/hard_cases")
     ap.add_argument("--headless", action="store_true")
-    # 万一将来固件更新真的给 RGB，可加这个开关
     ap.add_argument("--force-rgb", action="store_true",
-                    help="如果你的系统 capture_array 返回 RGB，再打开此开关做一次 RGB->BGR 转换用于显示/保存")
+                    help="仅当 capture_array('main') 返回 RGB 时使用，将其转换为 BGR 再显示/保存")
+    ap.add_argument("--save-debug", action="store_true",
+                    help="启动后保存一帧 /home/pi/view_debug.jpg 以便比对颜色")
     return ap.parse_args()
 
 def ensure_dir(p): os.makedirs(p, exist_ok=True)
@@ -32,31 +32,43 @@ def main():
     args = parse_args()
     ensure_dir(args.save_dir)
 
+    # 只用主流，声明 BGR888；让 AE/AWB 自动，颜色与 rpicam-hello 保持一致
     picam2 = Picamera2()
-    # 直接声明 BGR888，避免歧义
     cfg = picam2.create_video_configuration(
         main={"size": (1280, 960), "format": "BGR888"},
-        controls={"AeEnable": True, "AwbEnable": True}  # 全自动，颜色“原生”
+        controls={"AeEnable": True, "AwbEnable": True}
     )
     picam2.configure(cfg)
     picam2.start()
-    time.sleep(1.0)  # 让 AE/AWB 收敛
+    time.sleep(1.0)  # 预热让 AE/AWB 收敛
 
     model = YOLO(args.weights)
     last_save = 0
     fps_hist = []
 
+    if not args.headless:
+        cv2.namedWindow("Battery Detection — BGR trusted path", cv2.WINDOW_NORMAL)
+        cv2.resizeWindow("Battery Detection — BGR trusted path", 960, 720)
+
+    # 启动时抓一帧用于颜色核对
+    if args.save_debug:
+        frame0 = picam2.capture_array("main")
+        if args.force_rgb:
+            frame0 = cv2.cvtColor(frame0, cv2.COLOR_RGB2BGR)
+        cv2.imwrite("/home/pi/view_debug.jpg", frame0)
+        print("Saved /home/pi/view_debug.jpg", frame0.shape)
+
     try:
         while True:
             t0 = time.time()
 
-            # === 关键：把 capture_array("main") 当 BGR 用 ===
-            frame = picam2.capture_array("main")   # 实测：你的系统这里就是 BGR 顺序
-            if args.force-rgb:
-                # 仅在你确认返回的是 RGB 时再打开这个开关
+            # 关键：把 capture_array('main') 当 BGR 用（你机器实测就是这样）
+            frame = picam2.capture_array("main")
+            if args.force_rgb:
+                # 仅当你确认返回的是 RGB 时再打开这个开关
                 frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
 
-            # 推理：Ultralytics 接受 numpy 的 BGR（和 cv2.imread 一样）
+            # 推理：Ultralytics 接受 numpy BGR（与 cv2.imread 一致）
             infer_in = cv2.resize(frame, (args.imgsz, args.imgsz), interpolation=cv2.INTER_LINEAR)
             r = model.predict(source=infer_in, imgsz=args.imgsz, conf=args.conf, verbose=False)[0]
 
@@ -73,19 +85,17 @@ def main():
                     conf = float(b.conf[0])
                     cls_id = int(b.cls[0]) if b.cls is not None else 0
                     label = r.names.get(cls_id, "battery")
-
                     X1,Y1,X2,Y2 = int(x1*sx), int(y1*sy), int(x2*sx), int(y2*sy)
                     draw_box(frame, X1,Y1,X2,Y2, label, conf)
                     det_count += 1
                     if conf < (args.conf + 0.10): low_conf = True
 
             dt = (time.time()-t0)*1000.0
-            fps_hist.append(1000.0/max(dt,1.0))
-            if len(fps_hist) > 30: fps_hist.pop(0)
+            fps_hist.append(1000.0/max(dt,1.0));  fps_hist = fps_hist[-30:]
             hud = f"Detections:{det_count} | {dt:.1f} ms ({sum(fps_hist)/len(fps_hist):.1f} FPS)"
             cv2.putText(frame, hud, (10,28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
 
-            # 保存 hard cases（保持 BGR）
+            # 低置信或未检出时保存硬样本
             now = time.time()
             if (det_count==0 or low_conf) and (now-last_save>1.0):
                 fn=f"hard_{det_count}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
@@ -101,7 +111,8 @@ def main():
         pass
     finally:
         picam2.stop()
-        cv2.destroyAllWindows()
+        if not args.headless:
+            cv2.destroyAllWindows()
 
 if __name__ == "__main__":
     main()
