@@ -53,6 +53,12 @@ def main():
             #    注意：不要把它当 BGR 用！推理用它本身；显示/保存再转 BGR。
             frame_rgb = picam2.capture_array("main")  # shape: (H, W, 3) RGB
 
+            # === 立刻保存两张对照图（用来判断通道是否颠倒） ===
+            cv2.imwrite("/home/pi/raw_wrong.jpg", frame_rgb)  # 故意把 RGB 当 BGR 存 → 若发紫说明通道被交换
+            cv2.imwrite("/home/pi/raw_rgb.jpg", cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR))  # 正确的保存方式
+            print("Saved raw_* images:", frame_rgb.shape)
+            break
+            
             # 4) 推理：RGB -> resize（YOLO吃RGB，刚好省一次色彩转换）
             infer_in = cv2.resize(frame_rgb, (args.imgsz, args.imgsz),
                                   interpolation=cv2.INTER_LINEAR)
@@ -104,3 +110,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
