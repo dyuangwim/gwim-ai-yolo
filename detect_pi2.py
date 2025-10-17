@@ -1,4 +1,4 @@
-# detect_pi2.py — RPi4 + NCNN 稳定版（BGR 全链路、lores 推理、可选 headless）
+# detect_pi2.py — RPi4 + NCNN 稳定版（lores=YUV420 → BGR 转换；main=BGR；可选 headless）
 import os, time, argparse
 from datetime import datetime
 import cv2
@@ -7,7 +7,7 @@ from picamera2 import Picamera2
 
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--weights", default="/home/pi/models/best_ncnn_model")  # 也可指向 .pt / .tflite / .onnx
+    ap.add_argument("--weights", default="/home/pi/models/best_ncnn_model")
     ap.add_argument("--imgsz", type=int, default=320)
     ap.add_argument("--conf", type=float, default=0.30)
     ap.add_argument("--min_area", type=int, default=1800)
@@ -27,16 +27,19 @@ def draw_box(img_bgr, x1, y1, x2, y2, label, conf):
     cv2.putText(img_bgr, txt, (x1+2, y0+th+2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
 
 def main():
-    # 建议在 shell 里设环境变量（非必须）：export OMP_NUM_THREADS=4; export NCNN_THREADS=4
+    # 可选：限制线程，减少争用
+    os.environ.setdefault("OMP_NUM_THREADS", "4")
+    os.environ.setdefault("NCNN_THREADS", "4")
+
     args = parse_args()
     ensure_dir(args.save_dir)
 
-    # —— Camera：BGR888 全链路，避免任何颜色转换 —— #
+    # ---- Camera ----
     picam2 = Picamera2()
     main_w, main_h = 1280, 960
     cfg = picam2.create_video_configuration(
-        main = {"size": (main_w, main_h), "format": "BGR888"},
-        lores= {"size": (args.imgsz, args.imgsz), "format": "BGR888"},
+        main = {"size": (main_w, main_h), "format": "BGR888"},   # 显示用，BGR 直接画
+        lores= {"size": (args.imgsz, args.imgsz), "format": "YUV420"},  # 推理用，必须 YUV
         controls={"AeEnable": True, "AwbEnable": True}
     )
     picam2.configure(cfg)
@@ -49,7 +52,7 @@ def main():
         cv2.imwrite("/home/pi/view_debug.jpg", f0)
         print("Saved /home/pi/view_debug.jpg", f0.shape)
 
-    # —— Model —— #
+    # ---- Model ----
     model = YOLO(args.weights)
 
     if not args.headless:
@@ -63,32 +66,33 @@ def main():
         while True:
             t0 = time.time()
 
-            # lores 给推理；main 给显示
-            infer_in = picam2.capture_array("lores")   # (imgsz, imgsz, 3) BGR
-            frame_bgr = picam2.capture_array("main")   # (main_h, main_w, 3) BGR
+            # lores：YUV420 -> BGR (I420)
+            yuv = picam2.capture_array("lores")   # shape: (H*3/2, W), planar
+            # OpenCV 期望的 I420 格式高度为 H*3/2，宽为 W
+            infer_bgr = cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)
 
-            # 绝不让 4 通道进来
-            if infer_in.ndim == 3 and infer_in.shape[2] == 4: infer_in = infer_in[:, :, :3]
+            # 防止尺寸跑偏（少数驱动会给到非 imgsz×imgsz）
+            if infer_bgr.shape[:2] != (args.imgsz, args.imgsz):
+                infer_bgr = cv2.resize(infer_bgr, (args.imgsz, args.imgsz), interpolation=cv2.INTER_LINEAR)
+
+            # main：BGR888，直接显示
+            frame_bgr = picam2.capture_array("main")
             if frame_bgr.ndim == 3 and frame_bgr.shape[2] == 4: frame_bgr = frame_bgr[:, :, :3]
 
-            # 保底：若 lores 尺寸不是 imgsz×imgsz（某些驱动会不同步），就 resize 一下
-            if infer_in.shape[:2] != (args.imgsz, args.imgsz):
-                infer_in = cv2.resize(infer_in, (args.imgsz, args.imgsz), interpolation=cv2.INTER_LINEAR)
+            # 推理（直接喂 BGR，Ultralytics 内部会处理颜色）
+            r = model.predict(source=infer_bgr, imgsz=args.imgsz, conf=args.conf, verbose=False)[0]
 
-            # 直接喂 BGR 给 Ultralytics；它内部会处理
-            r = model.predict(source=infer_in, imgsz=args.imgsz, conf=args.conf, verbose=False)[0]
-
-            det_count, low_conf = 0, False
             # 将 lores 坐标映射到 main 尺寸
-            lh, lw = infer_in.shape[:2]
+            lh, lw = args.imgsz, args.imgsz
             mh, mw = frame_bgr.shape[:2]
             sx, sy = mw/float(lw), mh/float(lh)
 
+            det_count, low_conf = 0, False
             if r.boxes is not None and len(r.boxes) > 0:
                 for b in r.boxes:
                     x1,y1,x2,y2 = map(int, b.xyxy[0].tolist())
                     X1, Y1, X2, Y2 = int(x1*sx), int(y1*sy), int(x2*sx), int(y2*sy)
-                    if (X2-X1)*(Y2-Y1) < args.min_area: 
+                    if (X2-X1)*(Y2-Y1) < args.min_area:
                         continue
                     conf = float(b.conf[0])
                     cls_id = int(b.cls[0]) if b.cls is not None else 0
@@ -97,7 +101,6 @@ def main():
                     det_count += 1
                     if conf < (args.conf + 0.10): low_conf = True
 
-            # HUD
             dt = (time.time()-t0)*1000.0
             fps_hist.append(1000.0/max(dt,1.0));  fps_hist = fps_hist[-30:]
             hud = f"Det:{det_count} | {dt:.1f} ms ({sum(fps_hist)/len(fps_hist):.1f} FPS)"
@@ -112,7 +115,7 @@ def main():
 
             if not args.headless:
                 cv2.imshow("Battery Detection", frame_bgr)
-                if cv2.waitKey(1) & 0xFF == 27:
+                if cv2.waitKey(1) & 0xFF == 27:  # ESC
                     break
 
     except KeyboardInterrupt:
