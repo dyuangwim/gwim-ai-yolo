@@ -1,4 +1,4 @@
-# detect_pi2.py — RPi4 + NCNN 稳定版（lores=YUV420 → BGR 转换；main=BGR；可选 headless）
+# detect_pi2.py — RPi4 + NCNN 稳定版（lores=YUV420 → BGR；可选 I420/YV12/NV12/NV21；支持锁AWB）
 import os, time, argparse
 from datetime import datetime
 import cv2
@@ -14,6 +14,11 @@ def parse_args():
     ap.add_argument("--save_dir", default="/home/pi/hard_cases")
     ap.add_argument("--headless", action="store_true")
     ap.add_argument("--save-debug", action="store_true")
+    # 新增：YUV 子格式选择
+    ap.add_argument("--yuv", default="i420", choices=["i420","yv12","nv12","nv21"],
+                    help="lores=YUV420 转 BGR 的方式，默认 i420；颜色不对就换 yv12/nv12/nv21 试")
+    # 新增：锁白平衡
+    ap.add_argument("--lock-awb", action="store_true", help="预热后锁定 AWB，避免颜色漂移")
     return ap.parse_args()
 
 def ensure_dir(p): os.makedirs(p, exist_ok=True)
@@ -26,8 +31,19 @@ def draw_box(img_bgr, x1, y1, x2, y2, label, conf):
     cv2.rectangle(img_bgr, (x1, y0), (x1+tw+4, y0+th+6), (0,255,0), -1)
     cv2.putText(img_bgr, txt, (x1+2, y0+th+2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
 
+def yuv420_to_bgr(yuv_img, code):
+    if code == "i420":
+        return cv2.cvtColor(yuv_img, cv2.COLOR_YUV2BGR_I420)
+    if code == "yv12":
+        return cv2.cvtColor(yuv_img, cv2.COLOR_YUV2BGR_YV12)
+    if code == "nv12":
+        return cv2.cvtColor(yuv_img, cv2.COLOR_YUV2BGR_NV12)
+    if code == "nv21":
+        return cv2.cvtColor(yuv_img, cv2.COLOR_YUV2BGR_NV21)
+    # fallback
+    return cv2.cvtColor(yuv_img, cv2.COLOR_YUV2BGR_I420)
+
 def main():
-    # 可选：限制线程，减少争用
     os.environ.setdefault("OMP_NUM_THREADS", "4")
     os.environ.setdefault("NCNN_THREADS", "4")
 
@@ -38,13 +54,25 @@ def main():
     picam2 = Picamera2()
     main_w, main_h = 1280, 960
     cfg = picam2.create_video_configuration(
-        main = {"size": (main_w, main_h), "format": "BGR888"},   # 显示用，BGR 直接画
-        lores= {"size": (args.imgsz, args.imgsz), "format": "YUV420"},  # 推理用，必须 YUV
+        main = {"size": (main_w, main_h), "format": "BGR888"},           # 显示用
+        lores= {"size": (args.imgsz, args.imgsz), "format": "YUV420"},   # 推理用（YUV420 家族）
         controls={"AeEnable": True, "AwbEnable": True}
     )
     picam2.configure(cfg)
     picam2.start()
-    time.sleep(0.8)
+    time.sleep(0.8)  # 预热
+
+    # 可选：锁 AWB，避免颜色飘（先读元数据，再写入当前值）
+    if args.lock_awb:
+        try:
+            md = picam2.capture_metadata()
+            # ColourGains 是 (R,G)；没有就不锁
+            gains = md.get("ColourGains", None)
+            if gains:
+                picam2.set_controls({"AwbEnable": False, "ColourGains": gains})
+                print(f"[AWB] Locked with gains={gains}")
+        except Exception as e:
+            print(f"[AWB] lock failed: {e}")
 
     if args.save_debug:
         f0 = picam2.capture_array("main")
@@ -66,23 +94,22 @@ def main():
         while True:
             t0 = time.time()
 
-            # lores：YUV420 -> BGR (I420)
-            yuv = picam2.capture_array("lores")   # shape: (H*3/2, W), planar
-            # OpenCV 期望的 I420 格式高度为 H*3/2，宽为 W
-            infer_bgr = cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)
+            # lores：YUV420 平面 → BGR
+            yuv = picam2.capture_array("lores")   # shape: (H*3/2, W)
+            infer_bgr = yuv420_to_bgr(yuv, args.yuv)
 
-            # 防止尺寸跑偏（少数驱动会给到非 imgsz×imgsz）
+            # 保底 resize
             if infer_bgr.shape[:2] != (args.imgsz, args.imgsz):
                 infer_bgr = cv2.resize(infer_bgr, (args.imgsz, args.imgsz), interpolation=cv2.INTER_LINEAR)
 
-            # main：BGR888，直接显示
+            # main：BGR888
             frame_bgr = picam2.capture_array("main")
             if frame_bgr.ndim == 3 and frame_bgr.shape[2] == 4: frame_bgr = frame_bgr[:, :, :3]
 
-            # 推理（直接喂 BGR，Ultralytics 内部会处理颜色）
+            # 推理
             r = model.predict(source=infer_bgr, imgsz=args.imgsz, conf=args.conf, verbose=False)[0]
 
-            # 将 lores 坐标映射到 main 尺寸
+            # lores → main 尺度映射
             lh, lw = args.imgsz, args.imgsz
             mh, mw = frame_bgr.shape[:2]
             sx, sy = mw/float(lw), mh/float(lh)
@@ -92,7 +119,7 @@ def main():
                 for b in r.boxes:
                     x1,y1,x2,y2 = map(int, b.xyxy[0].tolist())
                     X1, Y1, X2, Y2 = int(x1*sx), int(y1*sy), int(x2*sx), int(y2*sy)
-                    if (X2-X1)*(Y2-Y1) < args.min_area:
+                    if (X2-X1)*(Y2-Y1) < args.min_area: 
                         continue
                     conf = float(b.conf[0])
                     cls_id = int(b.cls[0]) if b.cls is not None else 0
@@ -103,7 +130,7 @@ def main():
 
             dt = (time.time()-t0)*1000.0
             fps_hist.append(1000.0/max(dt,1.0));  fps_hist = fps_hist[-30:]
-            hud = f"Det:{det_count} | {dt:.1f} ms ({sum(fps_hist)/len(fps_hist):.1f} FPS)"
+            hud = f"Det:{det_count} | {dt:.1f} ms ({sum(fps_hist)/len(fps_hist):.1f} FPS) | yuv={args.yuv}"
             cv2.putText(frame_bgr, hud, (10,28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
 
             # hard cases
