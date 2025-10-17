@@ -25,6 +25,17 @@ def draw_box(img, x1, y1, x2, y2, label, conf):
     cv2.rectangle(img, (x1, y0), (x1+tw+4, y0+th+6), (0,255,0), -1)
     cv2.putText(img, txt, (x1+2, y0+th+2), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
 
+def fix_color_channels(img):
+    """
+    修复颜色通道问题
+    紫色通常意味着 B 和 R 通道交换了
+    """
+    # 方案1: 直接交换 R 和 B 通道
+    img_fixed = img.copy()
+    img_fixed[:, :, 0] = img[:, :, 2]  # B <- R
+    img_fixed[:, :, 2] = img[:, :, 0]  # R <- B
+    return img_fixed
+
 def main():
     # 线程设置
     os.environ.setdefault("OMP_NUM_THREADS", "4")
@@ -37,44 +48,59 @@ def main():
     picam2 = Picamera2()
     main_w, main_h = 1280, 960
     
-    # 重要：尝试不同的格式
-    print("Testing camera formats...")
+    print("Testing different camera configurations...")
     
-    # 方案1：先尝试 BGR888
+    # 方案1: 使用 YUV420 然后转换
     try:
+        print("Trying YUV420 + manual conversion...")
         cfg = picam2.create_video_configuration(
-            main={"size": (main_w, main_h), "format": "BGR888"},
+            main={"size": (main_w, main_h), "format": "YUV420"},
             controls={"AeEnable": True, "AwbEnable": True}
         )
         picam2.configure(cfg)
         picam2.start()
         time.sleep(2.0)
         
-        # 测试捕获
-        test_frame = picam2.capture_array("main")
-        print(f"[TEST] BGR888 format - frame shape: {test_frame.shape}")
-        cv2.imwrite("/home/pi/test_bgr.jpg", test_frame)
+        # 捕获 YUV 并手动转换
+        yuv_frame = picam2.capture_array("main")
+        print(f"YUV frame shape: {yuv_frame.shape}")
+        
+        # 尝试不同的 YUV 转换
+        try:
+            # 方法1: NV12 转换
+            if len(yuv_frame.shape) == 2:  # 单通道 YUV
+                h, w = yuv_frame.shape
+                if h == main_h * 3 // 2:  # YUV420 格式
+                    bgr_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420)
+                    print("Used YUV2BGR_I420 conversion")
+                else:
+                    bgr_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_NV12)
+                    print("Used YUV2BGR_NV12 conversion")
+            else:
+                bgr_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420)
+                print("Used YUV2BGR_I420 conversion (multi-channel)")
+                
+        except Exception as e:
+            print(f"YUV conversion failed: {e}")
+            # 尝试其他转换方法
+            try:
+                bgr_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_NV21)
+                print("Used YUV2BGR_NV21 conversion")
+            except:
+                try:
+                    bgr_frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_YV12)
+                    print("Used YUV2BGR_YV12 conversion")
+                except:
+                    print("All YUV conversions failed")
+                    bgr_frame = np.zeros((main_h, main_w, 3), dtype=np.uint8)
+        
+        cv2.imwrite("/home/pi/test_yuv_converted.jpg", bgr_frame)
+        print("Saved YUV converted image")
         
     except Exception as e:
-        print(f"BGR888 failed: {e}")
+        print(f"YUV420 failed: {e}")
         picam2.stop()
-        # 方案2：尝试 RGB888
-        try:
-            cfg = picam2.create_video_configuration(
-                main={"size": (main_w, main_h), "format": "RGB888"},
-                controls={"AeEnable": True, "AwbEnable": True}
-            )
-            picam2.configure(cfg)
-            picam2.start()
-            time.sleep(2.0)
-            
-            test_frame = picam2.capture_array("main")
-            print(f"[TEST] RGB888 format - frame shape: {test_frame.shape}")
-            cv2.imwrite("/home/pi/test_rgb.jpg", test_frame)
-            
-        except Exception as e2:
-            print(f"RGB888 also failed: {e2}")
-            return
+        return
 
     # ---- Model ----
     model = YOLO(args.weights)
@@ -90,20 +116,40 @@ def main():
         while True:
             t0 = time.time()
 
-            # 直接捕获主图像流
-            frame = picam2.capture_array("main")
+            # 捕获 YUV 帧并转换
+            yuv_frame = picam2.capture_array("main")
             
-            # 确保是3通道
-            if frame.ndim == 3 and frame.shape[2] == 4:
-                frame = frame[:, :, :3]
+            # YUV 转 BGR
+            try:
+                if len(yuv_frame.shape) == 2:
+                    h, w = yuv_frame.shape
+                    if h == main_h * 3 // 2:
+                        frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420)
+                    else:
+                        frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_NV12)
+                else:
+                    frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420)
+            except:
+                try:
+                    frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_NV21)
+                except:
+                    frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_YV12)
             
-            # 保存原始图像用于调试
-            cv2.imwrite("/home/pi/debug_frame_raw.jpg", frame)
+            # 如果颜色还是紫色，强制修复
+            if frame.mean(axis=2).mean() > 0:  # 确保不是全黑图像
+                # 检查是否是紫色（B和R通道交换）
+                b_mean = frame[:,:,0].mean()
+                r_mean = frame[:,:,2].mean()
+                if r_mean > b_mean * 1.5:  # 如果红色平均值远大于蓝色，可能是通道交换
+                    print("Detected possible B/R channel swap, fixing...")
+                    frame = fix_color_channels(frame)
+            
+            # 保存调试图像
+            cv2.imwrite("/home/pi/debug_current_frame.jpg", frame)
 
-            # 准备推理图像：调整大小
+            # 准备推理图像
             infer_img = cv2.resize(frame, (args.imgsz, args.imgsz), interpolation=cv2.INTER_LINEAR)
-            cv2.imwrite("/home/pi/debug_infer_input.jpg", infer_img)
-
+            
             # 推理
             r = model.predict(source=infer_img, imgsz=args.imgsz, conf=args.conf, verbose=False)[0]
 
@@ -127,11 +173,12 @@ def main():
                     if conf < (args.conf + 0.10): low_conf = True
 
             dt = (time.time()-t0)*1000.0
-            fps_hist.append(1000.0/max(dt,1.0));  fps_hist = fps_hist[-30:]
+            fps_hist.append(1000.0/max(dt,1.0))
+            fps_hist = fps_hist[-30:]
             hud = f"Det:{det_count} | {dt:.1f} ms ({sum(fps_hist)/len(fps_hist):.1f} FPS)"
             cv2.putText(frame, hud, (10,28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
 
-            # 直接显示，不进行颜色转换
+            # 显示
             if not args.headless:
                 cv2.imshow("Battery Detection", frame)
                 if cv2.waitKey(1) & 0xFF == 27:
