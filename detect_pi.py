@@ -1,7 +1,7 @@
-# detect_pi.py — FINAL STABLE (assume RGB by default; convert to BGR for OpenCV)
-# - 默认假定 capture_array('main') 返回 RGB（与你当前机器一致）
-# - 显示/保存/画框前统一转成 BGR
-# - 若将来系统返回 BGR，可加 --assume-bgr 关闭转换
+# detect_pi.py — FINAL STABLE (3-channel enforced; RGB-by-default)
+# - 强制相机输出 3 通道：RGB888（绝不让 4 通道进来）
+# - 默认把 capture_array('main') 当 RGB 用；显示/保存时转成 BGR
+# - 若你的系统实际返回 BGR，可加 --assume-bgr
 import os, time, argparse
 from datetime import datetime
 import cv2
@@ -17,7 +17,7 @@ def parse_args():
     ap.add_argument("--save_dir", default="/home/pi/hard_cases")
     ap.add_argument("--headless", action="store_true")
     ap.add_argument("--assume-bgr", action="store_true",
-                    help="若你的系统 capture_array('main') 返回 BGR，则加此开关跳过颜色转换")
+                    help="若你的系统 capture_array('main') 返回 BGR，则加此开关（跳过 RGB->BGR 转换）")
     ap.add_argument("--save-debug", action="store_true",
                     help="启动时保存一帧 /home/pi/view_debug.jpg 以核对颜色")
     return ap.parse_args()
@@ -36,14 +36,14 @@ def main():
     ensure_dir(args.save_dir)
 
     picam2 = Picamera2()
-    # 不强求格式，让 ISP/驱动按默认来（更一致）；只设尺寸
+    # 关键：强制 3 通道格式，避免 XRGB/BGRA 4 通道
     cfg = picam2.create_video_configuration(
-        main={"size": (1280, 960)},
+        main={"size": (1280, 960), "format": "RGB888"},  # 若你确定是 BGR 更稳，可改成 "BGR888"
         controls={"AeEnable": True, "AwbEnable": True}
     )
     picam2.configure(cfg)
     picam2.start()
-    time.sleep(1.0)  # 让 AE/AWB 收敛
+    time.sleep(1.0)  # AE/AWB 预热
 
     model = YOLO(args.weights)
     last_save = 0
@@ -56,6 +56,9 @@ def main():
     # 启动时抓一帧用于颜色核对
     if args.save_debug:
         f0 = picam2.capture_array("main")
+        # 保险：万一驱动还是给了 4 通道，就裁掉 alpha
+        if f0.ndim == 3 and f0.shape[2] == 4:
+            f0 = f0[:, :, :3]
         view = f0 if args.assume_bgr else cv2.cvtColor(f0, cv2.COLOR_RGB2BGR)
         cv2.imwrite("/home/pi/view_debug.jpg", view)
         print("Saved /home/pi/view_debug.jpg", view.shape)
@@ -64,15 +67,17 @@ def main():
         while True:
             t0 = time.time()
 
-            # 采集（你的机器实际给的是 RGB）
+            # 采集
             frame_raw = picam2.capture_array("main")
+            # 保险裁剪：绝不让 4 通道进入后续流程
+            if frame_raw.ndim == 3 and frame_raw.shape[2] == 4:
+                frame_raw = frame_raw[:, :, :3]
 
-            # 推理：Ultralytics 支持 numpy BGR 或 RGB；我们就用 RGB 省一次转换
+            # 推理（用 RGB，省一次转换）
             infer_in = cv2.resize(frame_raw, (args.imgsz, args.imgsz), interpolation=cv2.INTER_LINEAR)
-            # 注意：若未来你改成 BGR 推理，也没问题；Ultralytics会接受，但这里保持和上面一致即可
             r = model.predict(source=infer_in, imgsz=args.imgsz, conf=args.conf, verbose=False)[0]
 
-            # 显示/画框/保存：OpenCV 用 BGR
+            # 显示/保存用 BGR
             frame_bgr = frame_raw if args.assume_bgr else cv2.cvtColor(frame_raw, cv2.COLOR_RGB2BGR)
 
             h, w = frame_bgr.shape[:2]
@@ -92,11 +97,11 @@ def main():
                     if conf < (args.conf + 0.10): low_conf = True
 
             dt = (time.time()-t0)*1000.0
-            fps_hist.append(1000.0/max(dt,1.0)); fps_hist = fps_hist[-30:]
+            fps_hist.append(1000.0/max(dt,1.0));  fps_hist = fps_hist[-30:]
             hud = f"Detections:{det_count} | {dt:.1f} ms ({sum(fps_hist)/len(fps_hist):.1f} FPS)"
             cv2.putText(frame_bgr, hud, (10,28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0,255,255), 2)
 
-            # 低置信或未检出时保存硬样本
+            # 保存 hard cases
             now = time.time()
             if (det_count==0 or low_conf) and (now-last_save>1.0):
                 fn=f"hard_{det_count}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
