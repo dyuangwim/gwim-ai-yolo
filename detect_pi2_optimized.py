@@ -3,16 +3,17 @@ from datetime import datetime
 import cv2
 import numpy as np
 from ultralytics import YOLO
-from Picamera2 import Picamera2
+from picamera2 import Picamera2
 
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--weights", default="/home/pi/models/best_ncnn_model")  # 先用原模型
-    ap.add_argument("--imgsz", type=int, default=320)  # 先用320
+    ap.add_argument("--weights", default="/home/pi/models/best_ncnn_model")  # 默认用原模型
+    ap.add_argument("--imgsz", type=int, default=320)
     ap.add_argument("--conf", type=float, default=0.30)
     ap.add_argument("--min_area", type=int, default=1000)
     ap.add_argument("--save_dir", default="/home/pi/hard_cases")
     ap.add_argument("--headless", action="store_true")
+    ap.add_argument("--use-optimized", action="store_true", help="Use optimized model if available")
     return ap.parse_args()
 
 def ensure_dir(p): os.makedirs(p, exist_ok=True)
@@ -23,7 +24,6 @@ def draw_box_fast(img, x1, y1, x2, y2, label, conf):
     cv2.putText(img, txt, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
 
 def main():
-    # 环境设置
     os.environ["OMP_NUM_THREADS"] = "4"
     os.environ["NCNN_THREADS"] = "4"
     os.environ["NCNN_VERBOSE"] = "0"
@@ -33,7 +33,7 @@ def main():
 
     print("Initializing camera...")
     
-    # 相机配置 - 使用之前验证过能正常工作的设置
+    # 相机配置
     picam2 = Picamera2()
     main_w, main_h = 1280, 960
     
@@ -44,31 +44,38 @@ def main():
     )
     picam2.configure(config)
     picam2.start()
-    time.sleep(2.0)  # 充分预热
+    time.sleep(2.0)
 
     print("Loading model...")
     
-    # 先用原模型，确保稳定
-    model = YOLO(args.weights)
+    # 智能选择模型
+    optimized_path = "/home/pi/models/optimized_model"
+    original_path = "/home/pi/models/best_ncnn_model"
+    
+    if args.use_optimized and os.path.exists(optimized_path):
+        print("Using optimized model...")
+        model = YOLO(optimized_path)
+    else:
+        print("Using original model...")
+        model = YOLO(original_path)
+    
     print("Model loaded successfully!")
 
-    # 正确的预热
+    # 预热
     print("Warming up model...")
-    for _ in range(3):
-        warmup_frame = np.random.randint(0, 255, (args.imgsz, args.imgsz, 3), dtype=np.uint8)
-        _ = model.predict(source=warmup_frame, imgsz=args.imgsz, verbose=False)
+    warmup_frame = np.random.randint(0, 255, (args.imgsz, args.imgsz, 3), dtype=np.uint8)
+    _ = model.predict(source=warmup_frame, imgsz=args.imgsz, verbose=False)
     print("Warmup completed")
 
     if not args.headless:
         cv2.namedWindow("Battery Detection", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Battery Detection", 800, 600)
 
-    # 性能监控
     fps_hist = []
     frame_count = 0
     start_time = time.time()
     
-    # 正确的缩放因子计算
+    # 缩放因子
     lh, lw = args.imgsz, args.imgsz
     mh, mw = main_h, main_w
     sx, sy = mw / lw, mh / lh
@@ -79,7 +86,7 @@ def main():
         while True:
             frame_start = time.time()
 
-            # 使用 lores 流进行推理（更快）
+            # 使用 lores 流进行推理
             yuv_lores = picam2.capture_array("lores")
             infer_bgr = cv2.cvtColor(yuv_lores, cv2.COLOR_YUV2BGR_I420)
             
@@ -87,7 +94,7 @@ def main():
             main_frame = picam2.capture_array("main")
             if main_frame.ndim == 3 and main_frame.shape[2] == 4:
                 main_frame = main_frame[:, :, :3]
-            elif len(main_frame.shape) == 2:  # 如果是YUV格式
+            elif len(main_frame.shape) == 2:
                 main_frame = cv2.cvtColor(main_frame, cv2.COLOR_YUV2BGR_I420)
 
             # 推理
@@ -102,7 +109,6 @@ def main():
             if r.boxes is not None and len(r.boxes) > 0:
                 for box in r.boxes:
                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                    # 正确的坐标缩放
                     X1, Y1, X2, Y2 = int(x1 * sx), int(y1 * sy), int(x2 * sx), int(y2 * sy)
                     
                     area = (X2 - X1) * (Y2 - Y1)
@@ -130,12 +136,11 @@ def main():
             if not args.headless:
                 cv2.imshow("Battery Detection", main_frame)
                 key = cv2.waitKey(1) & 0xFF
-                if key == 27:  # ESC
+                if key == 27:
                     break
 
             frame_count += 1
             
-            # 定期输出性能信息
             if frame_count % 30 == 0:
                 elapsed = time.time() - start_time
                 overall_fps = frame_count / elapsed
@@ -152,11 +157,10 @@ def main():
         if not args.headless:
             cv2.destroyAllWindows()
         
-        # 最终性能报告
         total_time = time.time() - start_time
         print(f"\n=== Performance Summary ===")
-        print(f"Total frames processed: {frame_count}")
-        print(f"Total time: {total_time:.1f} seconds")
+        print(f"Total frames: {frame_count}")
+        print(f"Total time: {total_time:.1f}s")
         print(f"Average FPS: {frame_count/total_time:.1f}")
 
 if __name__ == "__main__":
