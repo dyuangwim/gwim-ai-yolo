@@ -7,69 +7,71 @@ from picamera2 import Picamera2
 
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--weights", default="/home/pi/models/best_ncnn_model")  # 默认用原模型
-    ap.add_argument("--imgsz", type=int, default=320)
+    ap.add_argument("--weights", default="/home/pi/models/best_ncnn_model")
+    ap.add_argument("--imgsz", type=int, default=256)  # 降低到256
     ap.add_argument("--conf", type=float, default=0.30)
-    ap.add_argument("--min_area", type=int, default=1000)
+    ap.add_argument("--min_area", type=int, default=800)  # 降低面积要求
     ap.add_argument("--save_dir", default="/home/pi/hard_cases")
     ap.add_argument("--headless", action="store_true")
-    ap.add_argument("--use-optimized", action="store_true", help="Use optimized model if available")
+    ap.add_argument("--no_display", action="store_true", help="完全禁用显示相关操作")
     return ap.parse_args()
 
 def ensure_dir(p): os.makedirs(p, exist_ok=True)
 
 def draw_box_fast(img, x1, y1, x2, y2, label, conf):
-    cv2.rectangle(img, (x1,y1), (x2,y2), (0,255,0), 2)
-    txt = f"{label} {conf:.1f}"
-    cv2.putText(img, txt, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
+    cv2.rectangle(img, (x1,y1), (x2,y2), (0,255,0), 1)  # 更细的线
+    if not args.no_display:
+        txt = f"{label} {conf:.1f}"
+        cv2.putText(img, txt, (x1, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0,255,0), 1)
 
 def main():
+    # 更激进的性能设置
     os.environ["OMP_NUM_THREADS"] = "4"
     os.environ["NCNN_THREADS"] = "4"
     os.environ["NCNN_VERBOSE"] = "0"
+    os.environ["OPENCV_OPENCL_RUNTIME"] = ""  # 禁用OpenCL
     
     args = parse_args()
     ensure_dir(args.save_dir)
 
     print("Initializing camera...")
     
-    # 相机配置
+    # 更低的相机分辨率
     picam2 = Picamera2()
-    main_w, main_h = 1280, 960
+    main_w, main_h = 1024, 768  # 降低显示分辨率
     
-    config = picam2.create_video_configuration(
+    config = picam2.create_preview_configuration(  # 使用preview配置，更快
         main={"size": (main_w, main_h), "format": "YUV420"},
-        lores={"size": (args.imgsz, args.imgsz), "format": "YUV420"},
-        controls={"AeEnable": True, "AwbEnable": True, "FrameRate": 30}
+        controls={
+            "AeEnable": True, 
+            "AwbEnable": True, 
+            "FrameRate": 30,
+            "ExposureTime": 15000,  # 固定曝光减少计算
+        }
     )
     picam2.configure(config)
     picam2.start()
-    time.sleep(2.0)
+    time.sleep(1.5)  # 减少预热时间
 
     print("Loading model...")
     
-    # 智能选择模型
-    optimized_path = "/home/pi/models/optimized_model"
-    original_path = "/home/pi/models/best_ncnn_model"
+    # 直接使用优化模型
+    model_path = "/home/pi/models/optimized_model" if os.path.exists("/home/pi/models/optimized_model") else args.weights
+    print(f"Using model: {model_path}")
     
-    if args.use_optimized and os.path.exists(optimized_path):
-        print("Using optimized model...")
-        model = YOLO(optimized_path)
-    else:
-        print("Using original model...")
-        model = YOLO(original_path)
-    
+    model = YOLO(model_path)
     print("Model loaded successfully!")
 
-    # 预热
-    print("Warming up model...")
+    # 快速预热
+    print("Quick warmup...")
     warmup_frame = np.random.randint(0, 255, (args.imgsz, args.imgsz, 3), dtype=np.uint8)
-    _ = model.predict(source=warmup_frame, imgsz=args.imgsz, verbose=False)
+    for _ in range(2):
+        _ = model.predict(source=warmup_frame, imgsz=args.imgsz, verbose=False)
     print("Warmup completed")
 
-    if not args.headless:
+    if not args.headless and not args.no_display:
         cv2.namedWindow("Battery Detection", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Battery Detection", 800, 600)
+        cv2.resizeWindow("Battery Detection", 640, 480)  # 更小的显示窗口
 
     fps_hist = []
     frame_count = 0
@@ -80,31 +82,38 @@ def main():
     mh, mw = main_h, main_w
     sx, sy = mw / lw, mh / lh
 
-    print("Starting detection loop...")
+    print("Starting ultra-optimized detection loop...")
     
     try:
         while True:
             frame_start = time.time()
 
-            # 使用 lores 流进行推理
-            yuv_lores = picam2.capture_array("lores")
-            infer_bgr = cv2.cvtColor(yuv_lores, cv2.COLOR_YUV2BGR_I420)
+            # 单次捕获，用于推理和显示
+            yuv_frame = picam2.capture_array("main")
             
-            # 捕获主流用于显示
-            main_frame = picam2.capture_array("main")
-            if main_frame.ndim == 3 and main_frame.shape[2] == 4:
-                main_frame = main_frame[:, :, :3]
-            elif len(main_frame.shape) == 2:
-                main_frame = cv2.cvtColor(main_frame, cv2.COLOR_YUV2BGR_I420)
+            # 快速YUV转换
+            if len(yuv_frame.shape) == 2:
+                frame = cv2.cvtColor(yuv_frame, cv2.COLOR_YUV2BGR_I420)
+            else:
+                frame = yuv_frame  # 如果已经是BGR
+            
+            # 准备推理图像 - 使用最快的方法
+            infer_img = cv2.resize(frame, (args.imgsz, args.imgsz), interpolation=cv2.INTER_NEAREST)
 
             # 推理
             predict_start = time.time()
-            results = model.predict(source=infer_bgr, imgsz=args.imgsz, conf=args.conf, verbose=False)
+            results = model.predict(
+                source=infer_img, 
+                imgsz=args.imgsz, 
+                conf=args.conf, 
+                verbose=False,
+                max_det=3  # 限制最大检测数量
+            )
             predict_time = (time.time() - predict_start) * 1000
             
             r = results[0]
 
-            # 处理检测结果
+            # 快速处理检测结果
             det_count = 0
             if r.boxes is not None and len(r.boxes) > 0:
                 for box in r.boxes:
@@ -116,52 +125,54 @@ def main():
                         conf = float(box.conf[0])
                         cls_id = int(box.cls[0])
                         label = r.names[cls_id]
-                        draw_box_fast(main_frame, X1, Y1, X2, Y2, label, conf)
+                        draw_box_fast(frame, X1, Y1, X2, Y2, label, conf)
                         det_count += 1
+                        if det_count >= 3:  # 最多处理3个检测
+                            break
 
-            # 计算FPS
+            # 优化的FPS计算
             frame_time = (time.time() - frame_start) * 1000
             current_fps = 1000.0 / max(frame_time, 1.0)
             fps_hist.append(current_fps)
-            if len(fps_hist) > 20:
+            if len(fps_hist) > 10:  # 更短的平滑窗口
                 fps_hist.pop(0)
             
             avg_fps = sum(fps_hist) / len(fps_hist)
             
-            # 显示信息
-            info_text = f"FPS: {avg_fps:.1f} | Det: {det_count} | Infer: {predict_time:.1f}ms"
-            cv2.putText(main_frame, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+            # 只在需要时添加文本
+            if not args.no_display:
+                info_text = f"FPS:{avg_fps:.1f} D:{det_count} I:{predict_time:.0f}ms"
+                cv2.putText(frame, info_text, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 1)
 
             # 显示
-            if not args.headless:
-                cv2.imshow("Battery Detection", main_frame)
+            if not args.headless and not args.no_display:
+                cv2.imshow("Battery Detection", frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key == 27:
                     break
 
             frame_count += 1
             
-            if frame_count % 30 == 0:
+            # 减少输出频率
+            if frame_count % 50 == 0:
                 elapsed = time.time() - start_time
                 overall_fps = frame_count / elapsed
-                print(f"Frame {frame_count}: Current FPS: {avg_fps:.1f}, Overall FPS: {overall_fps:.1f}")
+                print(f"Frames: {frame_count}, FPS: {overall_fps:.1f}")
 
     except KeyboardInterrupt:
         print("\nStopping...")
     except Exception as e:
         print(f"Error: {e}")
-        import traceback
-        traceback.print_exc()
     finally:
         picam2.stop()
-        if not args.headless:
+        if not args.headless and not args.no_display:
             cv2.destroyAllWindows()
         
         total_time = time.time() - start_time
-        print(f"\n=== Performance Summary ===")
-        print(f"Total frames: {frame_count}")
-        print(f"Total time: {total_time:.1f}s")
-        print(f"Average FPS: {frame_count/total_time:.1f}")
+        print(f"\n=== 最终性能 ===")
+        print(f"总帧数: {frame_count}")
+        print(f"总时间: {total_time:.1f}s")
+        print(f"平均FPS: {frame_count/total_time:.1f}")
 
 if __name__ == "__main__":
     main()
