@@ -47,7 +47,7 @@ def parse_args():
 
     # OCR 控制：OCR_EVERY=1 是默认且推荐的，用于高精度场景。
     ap.add_argument("--ocr", action="store_true", help="Enable OCR per detected battery")
-    ap.add_argument("--ocr_every", type=int, default=1, help="Run OCR every N frames. Lower is more accurate, higher is faster.")
+    ap.add_argument("--ocr_every", type=int, default=3, help="Run OCR every N frames. Lower is more accurate, higher is faster.")
     ap.add_argument("--ocr_pad", type=float, default=0.15, help="Crop padding ratio around battery for OCR [0-0.4]")
     
     # 性能/环境
@@ -244,7 +244,7 @@ def main():
 
             if r.boxes is not None and len(r.boxes) > 0 and r.boxes.id is not None:
                 
-                # 检查是否需要运行 OCR
+                # 检查是否需要运行 OCR - 降低间隔以提高响应速度
                 ocr_sample_frame = args.ocr and TESS_OK and (frame_count % args.ocr_every == 0)
                 
                 for i in range(len(r.boxes)):
@@ -272,7 +272,8 @@ def main():
                     ocr_conf = ocr_info['conf']
                     
                     # --- 运行 OCR 并更新跟踪数据 ---
-                    if ocr_sample_frame and not model_code:
+                    # 对于新出现的电池或者尚未识别成功的电池，立即尝试OCR
+                    if args.ocr and TESS_OK and (not model_code or track_id not in tracking_data):
                         ocr_t0 = time.time()
                         
                         # 裁剪区域 (带 Padding)
@@ -297,11 +298,13 @@ def main():
                     
                     # 优先显示 OCR 结果，其次显示 YOLO 置信度
                     if model_code:
-                        label_text = f"{model_code} | Conf:{conf:.2f}"
+                        # 只显示电池型号，不显示置信度
+                        label_text = f"{model_code}"
                         color = (0, 255, 0) # 绿色: 识别成功
                     else:
-                        label_text = f"Battery | Conf:{conf:.2f}"
-                        color = (0, 255, 255) # 黄色: 仅检测成功，等待 OCR 结果
+                        # 如果还没有OCR结果，显示检测状态
+                        label_text = f"Detecting..."
+                        color = (0, 255, 255) # 黄色: 检测成功，等待 OCR 结果
                         
                     draw_box(frame, X1, Y1, X2, Y2, label_text, color)
             
@@ -318,11 +321,11 @@ def main():
             if len(fps_hist) > 30: fps_hist.pop(0)
             avg_fps = sum(fps_hist)/len(fps_hist)
 
-            hud = f"Det:{det_count} | F-Time:{dt_ms:.1f}ms | {avg_fps:.1f}FPS"
+            hud = f"Detected:{det_count} | Frame:{dt_ms:.1f}ms | {avg_fps:.1f}FPS"
             if args.ocr:
                 if TESS_OK:
                     avg_ocr = (total_ocr_ms/ocr_runs) if ocr_runs else 0.0
-                    hud += f" | OCR Avg:{avg_ocr:.1f}ms (Every {args.ocr_every})"
+                    hud += f" | OCR:{avg_ocr:.1f}ms"
                 else:
                     hud += " | OCR:missing"
             
@@ -330,7 +333,7 @@ def main():
 
             # --- 显示 ---
             if not args.headless:
-                cv2.imshow("Battery+OCR", frame)
+                cv2.imshow("Battery Detection & OCR", frame)
                 if cv2.waitKey(1) & 0xFF == 27: break
 
             # --- 保存困难案例 ---
@@ -340,7 +343,8 @@ def main():
                 cv2.imwrite(os.path.join(args.save_dir, fn), frame)
                 last_save = now
 
-            if frame_count % 120 == 0:
+            # 降低进度打印频率，避免控制台输出过多
+            if frame_count % 60 == 0:
                 elapsed = time.time() - start_time
                 print(f"Processed {frame_count} frames in {elapsed:.1f}s, Avg FPS: {frame_count/elapsed:.1f}")
 
