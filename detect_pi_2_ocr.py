@@ -69,7 +69,7 @@ def draw_box(img, x1, y1, x2, y2, label, conf=None, info=None, color=(0,255,0)):
         txt += f" | {info}"
     (tw, th), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
     y0 = max(0, y1 - th - 6)
-    cv2.rectangle(img, (x1, y0), (x1+tw+8), (y0+th+8), color, -1)
+    cv2.rectangle(img, (x1, y0), (x1+tw+8, y0+th+8), color, -1)
     cv2.putText(img, txt, (x1+4, y0+th+3), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
 
 
