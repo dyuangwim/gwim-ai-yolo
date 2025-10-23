@@ -53,10 +53,12 @@ def draw_box(img, x1,y1,x2,y2, label, color=(255,255,255)):
 
 # ---------------- PaddleOCR ----------------
 def init_paddle_ocr():
-    # 只加载英文轻量模型；关闭方向检测
-    from paddleocr import PaddleOCR
-    ocr = PaddleOCR(use_textline_orientation=False, lang='en')
-    return ocr
+    ocr = PaddleOCR(
+        use_angle_cls=False,           # 关闭角度分类
+        use_textline_orientation=False, # 关闭文本方向检测
+        lang='en'
+    )
+    return ocr
 
 def prep_roi_for_ocr(bgr, max_w=240):
     """缩放到适中宽度+去噪，返回 RGB（PaddleOCR 接受 RGB ndarray）"""
@@ -241,3 +243,4 @@ def main():
 
 if __name__=="__main__":
     main()
+
