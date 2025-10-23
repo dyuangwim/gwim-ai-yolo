@@ -8,7 +8,7 @@ from ultralytics import YOLO
 from picamera2 import Picamera2
 
 # ---------------- OCR 规则（只抽电池型号） ----------------
-RE_CR     = re.compile(r"CR\s*(1616|1620|2016|2025|2032)", re.I)
+RE_CR = re.compile(r"CR\s*(1616|1620|2016|2025|2032)", re.I)
 RE_DIGITS = re.compile(r"(1616|1620|2016|2025|2032)")
 
 def norm_model(s: str) -> str:
@@ -243,4 +243,5 @@ def main():
 
 if __name__=="__main__":
     main()
+
 
