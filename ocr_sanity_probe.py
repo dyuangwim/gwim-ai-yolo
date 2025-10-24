@@ -73,4 +73,68 @@ def ocr_with_paddle(img_rgb):
                 for it in res:
                     if isinstance(it, dict):
                         t = it.get('text') or it.get('transcription') or it.get('label') or ''
-                        c = it.g
+                        c = it.get('score') or it.get('confidence') or it.get('prob') or 0.0
+                        if t: texts.append(str(t).strip()); probs.append(float(c) if c else 0.0)
+                    elif isinstance(it, (list, tuple)) and len(it) >= 2:
+                        cand = it[1]
+                        if isinstance(cand, (list, tuple)) and len(cand) >= 2 and isinstance(cand[0], str):
+                            texts.append(cand[0].strip()); probs.append(float(cand[1]) if len(cand)>1 else 0.0)
+            raw = " ".join(texts).upper()
+            conf = max(probs) if probs else 0.0
+            if conf > best_conf:
+                best_conf, best_raw = conf, raw
+        except Exception:
+            pass
+    return True, best_raw, norm_model(best_raw), float(best_conf)
+
+def ocr_with_tesseract(img_rgb):
+    try:
+        import pytesseract
+    except Exception as e:
+        return False, f"[TESS] INIT_FAIL: {e}", "", 0.0
+
+    variants = prep_variants(cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR))
+    best_raw, best_score = "", -1e9
+    for v in variants:
+        gray = cv2.cvtColor(v, cv2.COLOR_RGB2GRAY)
+        # psm 6：假设是一行/少量文本；白名单：只允许 CR 和数字与点
+        cfg = '--psm 6 -c tessedit_char_whitelist=CR0123456789.'
+        try:
+            data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT, config=cfg)
+            txt = " ".join([w for w in data.get("text", []) if w]).upper()
+            # 简单打分：命中CR优先 + 长度微奖分
+            score = (100 if RE_CR.search(txt) else (60 if RE_DIG.search(txt) else 0)) + min(len(txt), 40) * 0.5
+            if score > best_score:
+                best_score, best_raw = score, txt
+        except Exception:
+            pass
+    return True, best_raw, norm_model(best_raw), 0.0
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--img", default="test.jpg", help="path to image (default: ./test.jpg)")
+    args = ap.parse_args()
+
+    if not os.path.isfile(args.img):
+        print(f"Image not found: {args.img}")
+        sys.exit(1)
+
+    bgr = cv2.imread(args.img)
+    if bgr is None:
+        print("Failed to read image"); sys.exit(1)
+    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+
+    okP, rawP, modelP, probP = ocr_with_paddle(rgb)
+    if okP:
+        print(f"[PADDLE] model={modelP or '?'} | prob={probP:.3f} | raw={rawP}")
+    else:
+        print(rawP)  # INIT_FAIL reason
+
+    okT, rawT, modelT, _ = ocr_with_tesseract(rgb)
+    if okT:
+        print(f"[TESS ] model={modelT or '?'} | raw={rawT}")
+    else:
+        print(rawT)
+
+if __name__ == "__main__":
+    main()
