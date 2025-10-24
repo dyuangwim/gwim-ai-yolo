@@ -1,5 +1,8 @@
-# detect_pi_2_ocr_paddle_v3.py
-# RPi5 | YOLO + PaddleOCR(ONNX backend) | Battery-surface-only OCR | Budget+Lock | Color rules
+# detect_pi_2_ocr_paddle_v4.py
+# RPi5 | YOLO + PaddleOCR(ONNX backend) | Battery-surface-only
+# - 兼容所有常见 PaddleOCR 返回结构（predict/ocr）
+# - 只读电池表面（中心收缩），多重预处理 + 0°/180°兜底
+# - 限额 + 锁定；颜色规则：绿/红/白
 
 import os, time, argparse, re
 from datetime import datetime
@@ -7,7 +10,7 @@ import cv2, numpy as np
 from ultralytics import YOLO
 from picamera2 import Picamera2
 
-# ---------- 型号抽取 ----------
+# ----------- 型号抽取 -----------
 RE_CR     = re.compile(r"CR\s*(1616|1620|2016|2025|2032)", re.I)
 RE_DIGITS = re.compile(r"(1616|1620|2016|2025|2032)")
 def norm_model(s: str) -> str:
@@ -16,7 +19,7 @@ def norm_model(s: str) -> str:
     m = RE_CR.search(s) or RE_DIGITS.search(s)
     return "CR" + m.group(1) if m else ""
 
-# ---------- CLI ----------
+# ----------- CLI -----------
 def parse_args():
     ap = argparse.ArgumentParser("RPi5 YOLO + PaddleOCR(ONNX) battery-surface-only")
     ap.add_argument("--weights", required=True)
@@ -27,17 +30,21 @@ def parse_args():
     ap.add_argument("--headless", action="store_true")
     ap.add_argument("--preview", action="store_true")
     ap.add_argument("--assume_bgr", action="store_true")
+
     # OCR 调度
     ap.add_argument("--ocr", action="store_true")
-    ap.add_argument("--ocr_every", type=int, default=6)
-    ap.add_argument("--ocr_budget", type=int, default=3)
-    ap.add_argument("--ocr_lock_conf", type=float, default=0.55)  # 0~1
-    ap.add_argument("--ocr_pad", type=float, default=0.12)
+    ap.add_argument("--ocr_every", type=int, default=8)          # 稍放慢，稳定FPS
+    ap.add_argument("--ocr_budget", type=int, default=2)         # 每帧最多 2 个
+    ap.add_argument("--ocr_lock_conf", type=float, default=0.55) # 0~1
+    ap.add_argument("--ocr_pad", type=float, default=0.10)       # 外扩少一点
+    ap.add_argument("--center_shrink", type=float, default=0.18, help="中心收缩比例，过滤掉卡面边缘")
+
     # 批次目标
     ap.add_argument("--expected_model", default="")
+    ap.add_argument("--debug_ocr", action="store_true", help="仅当无法解析时打印一次OCR原始返回")
     return ap.parse_args()
 
-# ---------- 绘制 ----------
+# ----------- 绘制 -----------
 def ensure_dir(p): os.makedirs(p, exist_ok=True)
 def draw_box(img, x1,y1,x2,y2, label, color=(255,255,255)):
     cv2.rectangle(img,(x1,y1),(x2,y2),color,2)
@@ -46,59 +53,114 @@ def draw_box(img, x1,y1,x2,y2, label, color=(255,255,255)):
     cv2.rectangle(img,(x1,y0),(x1+tw+8,y0+th+8),color,-1)
     cv2.putText(img,label,(x1+4,y0+th+3),cv2.FONT_HERSHEY_SIMPLEX,0.6,(0,0,0),2)
 
-# ---------- PaddleOCR (ONNX backend) ----------
+# ----------- PaddleOCR (ONNX backend) -----------
 def init_paddle_ocr_onnx():
-    # 关键：use_onnx=True，完全绕开 paddlepaddle 原生库
     from paddleocr import PaddleOCR
-    # 关闭文本行方向（更快）；英文；启用 ONNX
     return PaddleOCR(use_textline_orientation=False, lang='en', use_onnx=True)
 
-def prep_roi_for_ocr(bgr, max_w=240):
-    if bgr is None or bgr.size==0: return None
-    h,w=bgr.shape[:2]
-    if w>max_w:
-        s=max_w/float(w)
-        bgr=cv2.resize(bgr,(int(w*s),int(h*s)),interpolation=cv2.INTER_LINEAR)
-    bgr=cv2.GaussianBlur(bgr,(3,3),0)
-    return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+def _unsharp_mask(gray, amount=1.0, radius=3):
+    blur = cv2.GaussianBlur(gray, (radius|1, radius|1), 0)
+    sharp = cv2.addWeighted(gray, 1+amount, blur, -amount, 0)
+    return sharp
+
+def _clahe(gray):
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    return clahe.apply(gray)
+
+def prep_roi_for_ocr(bgr, max_w=320, gamma=1.1):
+    """放大→灰度→CLAHE→unsharp→轻度去噪→RGB；返回两角度(0°, 180°)"""
+    if bgr is None or bgr.size==0: return None, None
+    h,w = bgr.shape[:2]
+    if w > max_w:
+        s = max_w/float(w)
+        bgr = cv2.resize(bgr, (int(w*s), int(h*s)), interpolation=cv2.INTER_LINEAR)
+
+    # 光照微调（gamma）
+    if gamma != 1.0:
+        table = np.array([((i/255.0)**(1.0/gamma))*255 for i in np.arange(256)]).astype("uint8")
+        bgr = cv2.LUT(bgr, table)
+
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    gray = _clahe(gray)
+    gray = _unsharp_mask(gray, amount=1.0, radius=3)
+    gray = cv2.GaussianBlur(gray,(3,3),0)
+
+    rgb0 = cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)   # PaddleOCR 接受 RGB
+    rgb180 = cv2.rotate(rgb0, cv2.ROTATE_180)
+    return rgb0, rgb180
 
 def _call_paddle_ocr(ocr, rgb_img):
-    # 兼容不同版本 API
-    if hasattr(ocr, "predict"):
-        return ocr.predict(rgb_img)   # ONNX 后端通常支持
+    if hasattr(ocr, "predict"):   # 新API优先
+        return ocr.predict(rgb_img)
     else:
-        return ocr.ocr(rgb_img)       # 旧接口
+        return ocr.ocr(rgb_img)
 
 def _parse_ocr_result(res):
+    """
+    统一解析各种返回结构，输出 texts(list[str]), probs(list[float]).
+    兼容：
+    - 旧: [ [ [box, (text, prob)], ... ] ]
+    - 混合: [ [box, (text, prob)], ... ]
+    - 新: [ {'rec': [ [text,prob], ... ], 'det': ...}, ... ]
+    - 新: [ {'text':..., 'score':...}, ... ]
+    """
     texts, probs = [], []
     if res is None: return texts, probs
-    # 统一成“列表”
+
+    # 如果是 [[...]] 的嵌套，压一层
     if isinstance(res, list) and len(res)==1 and isinstance(res[0], list):
         res = res[0]
+
+    # 如果是列表里包 dict，优先取 'rec' / 'rec_res'
+    if isinstance(res, list) and len(res)>0 and isinstance(res[0], dict):
+        for item in res:
+            # 结构形如 {'rec': [['CR2025',0.98], ...], 'det': ...}
+            if "rec" in item and isinstance(item["rec"], (list,tuple)):
+                for rec_item in item["rec"]:
+                    if isinstance(rec_item, (list,tuple)) and len(rec_item)>=2:
+                        texts.append(str(rec_item[0]).strip())
+                        try: probs.append(float(rec_item[1]))
+                        except: probs.append(0.0)
+            # 有些包叫 rec_res
+            elif "rec_res" in item and isinstance(item["rec_res"], (list,tuple)):
+                for rec_item in item["rec_res"]:
+                    if isinstance(rec_item, (list,tuple)) and len(rec_item)>=2:
+                        texts.append(str(rec_item[0]).strip())
+                        try: probs.append(float(rec_item[1]))
+                        except: probs.append(0.0)
+            else:
+                # 极简: {'text':..., 'score':...}
+                txt = item.get('text') or item.get('transcription') or item.get('label') or ""
+                sc  = item.get('score') or item.get('confidence') or item.get('prob') or 0.0
+                if txt != "":
+                    texts.append(str(txt).strip())
+                    try: probs.append(float(sc))
+                    except: probs.append(0.0)
+        return texts, probs
+
+    # 列表里是 [box, (text,prob)] 的老结构
     if isinstance(res, list):
         for item in res:
-            # 旧结构: [box, (text, prob)]
             if isinstance(item, (list,tuple)) and len(item)>=2:
-                cand=item[1]
-                if isinstance(cand,(list,tuple)) and len(cand)>=2 and isinstance(cand[0],str):
+                cand = item[1]
+                if isinstance(cand, (list,tuple)) and len(cand)>=2 and isinstance(cand[0], str):
                     texts.append(cand[0].strip())
                     try: probs.append(float(cand[1]))
                     except: probs.append(0.0)
-                    continue
-            # 新结构: dict
-            if isinstance(item, dict):
-                txt=item.get('text') or item.get('transcription') or item.get('label') or ""
-                sc =item.get('score') or item.get('confidence') or item.get('prob') or 0.0
-                texts.append(str(txt).strip())
-                try: probs.append(float(sc))
-                except: probs.append(0.0)
-                continue
     return texts, probs
 
-def paddle_ocr_once(ocr, rgb_img):
+def paddle_ocr_once(ocr, rgb_img, debug=False, printed=[False]):
     res = _call_paddle_ocr(ocr, rgb_img)
     texts, probs = _parse_ocr_result(res)
-    if not texts: return "", "", 0.0
+    if (not texts) and debug and (not printed[0]):
+        printed[0] = True
+        try:
+            print("DEBUG OCR raw result (truncated):", str(res)[:400])
+        except Exception:
+            print("DEBUG OCR raw result: <unprintable>")
+    if not texts:
+        return "", "", 0.0
+
     raw = " ".join(texts).upper()
     best_model=""; best_prob=0.0
     for t,p in zip(texts, probs if probs else [0.0]*len(texts)):
@@ -109,10 +171,10 @@ def paddle_ocr_once(ocr, rgb_img):
     conf  = float(best_prob if model else (max(probs) if probs else 0.0))
     return model, raw, conf
 
-# ---------- 主程序 ----------
+# ----------- 主程序 -----------
 def main():
     args = parse_args()
-    # 限制线程，避免 OpenBLAS/OMP 抢线程
+    # 约束线程，避免底层冲突
     os.environ["OMP_NUM_THREADS"]="1"; os.environ["OPENBLAS_NUM_THREADS"]="1"
     os.environ["NCNN_THREADS"]="4"; os.environ.setdefault("NCNN_VERBOSE","0")
     ensure_dir(args.save_dir)
@@ -124,7 +186,7 @@ def main():
         try:
             ocr = init_paddle_ocr_onnx()
         except Exception as e:
-            print("❌ PaddleOCR(ONNX) 初始化失败：", e)
+            print("❌ PaddleOCR(ONNX) init failed:", e)
             args.ocr=False; ocr=None
     else:
         ocr=None
@@ -175,7 +237,7 @@ def main():
                     tid=int(b.id[0]); ids.add(tid)
                     info=tracks.get(tid, {"model":"", "conf":0.0, "locked":False})
 
-                    # OCR：只读电池ROI；限额+锁定
+                    # 只读“电池中心”ROI，避免卡面文字
                     if do_ocr and (not info["locked"]) and budget>0 and ocr is not None:
                         pad=args.ocr_pad; w,h=X2-X1, Y2-Y1
                         px,py=int(w*pad), int(h*pad)
@@ -183,17 +245,31 @@ def main():
                         ox2,oy2=min(main_w,X2+px), min(main_h,Y2+py)
                         crop=frame[oy1:oy2, ox1:ox2]
 
-                        rgb=prep_roi_for_ocr(crop, max_w=240)
-                        if rgb is not None:
+                        # 中心收缩，过滤边缘（卡面字常在边缘）
+                        shrink = max(0.0, min(0.4, args.center_shrink))
+                        cw, ch = ox2-ox1, oy2-oy1
+                        cx1 = ox1 + int(cw*shrink)
+                        cy1 = oy1 + int(ch*shrink)
+                        cx2 = ox2 - int(cw*shrink)
+                        cy2 = oy2 - int(ch*shrink)
+                        if cx2>cx1 and cy2>cy1:
+                            crop = frame[cy1:cy2, cx1:cx2]
+
+                        rgb0, rgb180 = prep_roi_for_ocr(crop, max_w=320, gamma=1.1)
+                        if rgb0 is not None:
                             t_ocr0=time.time()
-                            m, raw, prob = paddle_ocr_once(ocr, rgb)
+                            m0, raw0, p0 = paddle_ocr_once(ocr, rgb0, debug=args.debug_ocr)
+                            m1, raw1, p1 = paddle_ocr_once(ocr, rgb180, debug=False)
+                            # 取更好的一次
+                            if (p1>p0): m, prob = m1, p1
+                            else:       m, prob = m0, p0
                             ocr_ms=(time.time()-t_ocr0)*1000.0
                             total_ocr_ms+=ocr_ms; ocr_runs+=1; budget-=1
                             if m and (prob>info["conf"] or not info["model"]):
                                 info["model"]=m; info["conf"]=prob
                                 if prob >= args.ocr_lock_conf: info["locked"]=True
 
-                    # 颜色规则：绿=匹配；红=读到但不匹配；白=未知(没读到或未设expected)
+                    # 颜色规则：绿=匹配；红=不匹配；白=未知
                     label_model = info["model"] if info["model"] else "?"
                     color=(255,255,255)
                     if expected_model:
@@ -218,7 +294,7 @@ def main():
             cv2.putText(frame, hud, (10,28), cv2.FONT_HERSHEY_SIMPLEX,0.7,(0,255,255),2)
 
             if not args.headless:
-                cv2.imshow("Battery+PaddleOCR(ONNX)", frame)
+                cv2.imshow("Battery+PaddleOCR(ONNX)-v4", frame)
                 if cv2.waitKey(1)&0xFF==27: break
 
             now=time.time()
