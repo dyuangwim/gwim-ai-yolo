@@ -1,25 +1,15 @@
-# detect_pi_2_ocr_async.py — RPi5 YOLO (NCNN) + Async OCR (PaddleOCR ONNX→fallback Tesseract)
-# 目标：把OCR放到独立进程，不阻塞主检测。支持“限额+锁定”、批量16颗、颜色规则（预设型号=青色、错误=红色）。
-# 参考你现有脚本：detect_pi2.py（仅YOLO快）与 detect_pi_2_ocr.py（同步OCR较慢）和 detect_pi_2_ocr_fast 的限额/锁定思路。
+# detect_pi_2_ocr_async.py — RPi5 YOLO (NCNN) + Async OCR (PaddleOCR→fallback Tesseract)
+# 修复：避免把 YOLO 模型变量与 OCR 文本变量同名（导致 'str' 没有 track）；
+#       PaddleOCR 某些版本不支持 use_onnx，自动降级到兼容构造或 Tesseract。
+#       继续保留：限额+锁定/中心收缩ROI/16颗批量/颜色规则。
 #
-# 快速使用：
+# 用法（示例）：
 #   python3 detect_pi_2_ocr_async.py \
 #       --weights /home/pi/models/best_ncnn_model \
 #       --imgsz 320 --conf 0.30 --expected_model CR2025 --ocr --ocr_every 8 \
 #       --ocr_budget 2 --ocr_lock_conf 0.55 --center_shrink 0.18 --preview
-#
-# 关键参数：
-#   --ocr_every N      每 N 帧触发一次 OCR 调度（默认8）
-#   --ocr_budget K     每次调度最多K个ROI进入OCR队列（默认2）
-#   --ocr_lock_conf P  概率>=P即“锁定”，不再重复OCR（默认0.55）
-#   --center_shrink R  对ROI做中心收缩 R（0~0.4，默认0.18），只读表面文字区
-#   --expected_model   预设型号（如 CR2025）。匹配=青色，不匹配=红色；未知=白/黄
-#
-# 依赖：
-#   pip install ultralytics paddleocr opencv-python-headless picamera2 numpy
-#   （PaddleOCR 在RPi上用CPU+ONNX后端；若PaddleOCR不可用，自动降级用pytesseract）
 
-import os, time, argparse, re, sys
+import os, time, argparse, re
 from datetime import datetime
 import cv2, numpy as np
 from ultralytics import YOLO
@@ -93,8 +83,6 @@ def draw_small_text(img, x, y, text, color=(200,200,200)):
 
 # ---------- OCR Worker 实现 ----------
 
-# 轻量预处理：放大→灰度→CLAHE→锐化→轻去噪→两角度
-
 def _unsharp_mask(gray, amount=1.0, radius=3):
     blur = cv2.GaussianBlur(gray, (radius|1, radius|1), 0)
     return cv2.addWeighted(gray, 1+amount, blur, -amount, 0)
@@ -135,31 +123,23 @@ def _parse_ocr_result(res):
             if "rec" in item and isinstance(item["rec"], (list,tuple)):
                 for r in item["rec"]:
                     if isinstance(r,(list,tuple)) and len(r)>=2:
-                        texts.append(str(r[0]).strip())
-                        try: probs.append(float(r[1]))
-                        except: probs.append(0.0)
+                        texts.append(str(r[0]).strip()); probs.append(float(r[1]) if len(r)>1 else 0.0)
             elif "rec_res" in item and isinstance(item["rec_res"], (list,tuple)):
                 for r in item["rec_res"]:
                     if isinstance(r,(list,tuple)) and len(r)>=2:
-                        texts.append(str(r[0]).strip())
-                        try: probs.append(float(r[1]))
-                        except: probs.append(0.0)
+                        texts.append(str(r[0]).strip()); probs.append(float(r[1]) if len(r)>1 else 0.0)
             else:
                 txt=item.get('text') or item.get('transcription') or item.get('label') or ""
                 sc =item.get('score') or item.get('confidence') or item.get('prob') or 0.0
                 if txt:
-                    texts.append(str(txt).strip())
-                    try: probs.append(float(sc))
-                    except: probs.append(0.0)
+                    texts.append(str(txt).strip()); probs.append(float(sc) if sc else 0.0)
         return texts, probs
     if isinstance(res, list):
         for it in res:
             if isinstance(it,(list,tuple)) and len(it)>=2:
                 cand=it[1]
                 if isinstance(cand,(list,tuple)) and len(cand)>=2 and isinstance(cand[0],str):
-                    texts.append(cand[0].strip())
-                    try: probs.append(float(cand[1]))
-                    except: probs.append(0.0)
+                    texts.append(cand[0].strip()); probs.append(float(cand[1]) if len(cand)>1 else 0.0)
     return texts, probs
 
 
@@ -178,9 +158,9 @@ def paddle_ocr_once(ocr, rgb_img, debug_once=False, printed=[False]):
         m=RE_CR.search(t) or RE_DIGITS.search(t)
         if m and float(p)>best_prob:
             best_model=t; best_prob=float(p)
-    model=norm_model(best_model if best_model else raw)
-    conf=float(best_prob if model else (max(probs) if probs else 0.0))
-    return True, model, raw, conf
+    model_out=norm_model(best_model if best_model else raw)
+    conf=float(best_prob if model_out else (max(probs) if probs else 0.0))
+    return True, model_out, raw, conf
 
 
 def tesseract_ocr_once(bgr_img):
@@ -198,25 +178,22 @@ def tesseract_ocr_once(bgr_img):
         return True, "", "", 0.0
     raw=" ".join(texts).upper()
     m=RE_CR.search(raw) or RE_DIGITS.search(raw)
-    model=norm_model(m.group(0) if m else raw)
+    model_out=norm_model(m.group(0) if m else raw)
     conf=float(sum(confs)/len(confs)) if confs else 0.0
-    return True, model, raw, conf
+    return True, model_out, raw, conf
 
 
 def ocr_worker(input_q: mp.Queue, output_q: mp.Queue, backend: str, debug_once: bool=False):
-    """独立进程：初始化OCR后循环消费任务。任务数据结构：
-    {
-      'tid': int, 'crop': np.ndarray(BGR), 'ts': float
-    }
-    输出：{'tid':int, 'ran':bool, 'model':str, 'raw':str, 'prob':float, 'ms':float}
-    """
+    """独立进程：初始化OCR后循环消费任务。"""
     ocr=None; backend_used="OFF"
     if backend.upper()=="PADDLE":
         try:
             from paddleocr import PaddleOCR
-            ocr=PaddleOCR(use_textline_orientation=False, lang='en', use_onnx=True)
-            backend_used="PADDLE"
-            print("[OCR-Worker] PaddleOCR init OK (ONNX)")
+            try:
+                ocr=PaddleOCR(use_textline_orientation=False, lang='en', use_angle_cls=False)
+            except TypeError:
+                ocr=PaddleOCR(lang='en')
+            backend_used="PADDLE"; print("[OCR-Worker] PaddleOCR init OK")
         except Exception as e:
             print("[OCR-Worker] Paddle init failed, fallback to Tesseract:", e)
             backend_used="TESSERACT"
@@ -229,25 +206,25 @@ def ocr_worker(input_q: mp.Queue, output_q: mp.Queue, backend: str, debug_once: 
         except queue.Empty:
             continue
         if task is None:
-            break  # poison pill
+            break
         crop=task['crop']
         t0=time.time()
         try:
             if backend_used=="PADDLE" and ocr is not None:
-                rgb0, rgb180, bgr_scaled, gray_scaled = prep_roi_for_ocr(crop, max_w=320, gamma=1.1)
+                rgb0, rgb180, _, _ = prep_roi_for_ocr(crop, max_w=320, gamma=1.1)
                 if rgb0 is None:
-                    ran, model, raw, prob = True, "", "", 0.0
+                    ran, model_out, raw, prob = True, "", "", 0.0
                 else:
-                    ran0, m0, raw0, p0 = paddle_ocr_once(ocr, rgb0, debug_once=debug_once)
-                    ran1, m1, raw1, p1 = paddle_ocr_once(ocr, rgb180, debug_once=False)
-                    if p1>p0: model, raw, prob = m1, raw1, p1
-                    else:     model, raw, prob = m0, raw0, p0
+                    _, m0, raw0, p0 = paddle_ocr_once(ocr, rgb0, debug_once=debug_once)
+                    _, m1, raw1, p1 = paddle_ocr_once(ocr, rgb180, debug_once=False)
+                    if p1>p0: model_out, raw, prob = m1, raw1, p1
+                    else:     model_out, raw, prob = m0, raw0, p0
             else:
-                ran, model, raw, prob = tesseract_ocr_once(crop)
+                _, model_out, raw, prob = tesseract_ocr_once(crop)
         except Exception as e:
-            model, raw, prob = "", f"ERR:{e}", 0.0
+            model_out, raw, prob = "", f"ERR:{e}", 0.0
         ms=(time.time()-t0)*1000.0
-        output_q.put({'tid': task['tid'], 'ran': True, 'model': model, 'raw': raw, 'prob': float(prob), 'ms': ms})
+        output_q.put({'tid': task['tid'], 'ran': True, 'model': model_out, 'raw': raw, 'prob': float(prob), 'ms': ms})
 
 # ---------- 主程序 ----------
 
@@ -271,10 +248,10 @@ def main():
         main={"size":(main_w,main_h),"format":"YUV420"}, controls={"FrameRate":30})
     picam2.configure(cfg); picam2.start(); time.sleep(1.0)
 
-    # YOLO 模型
+    # YOLO 模型（用 yolo 变量名，避免与 OCR 文本混名）
     print("Loading YOLO…")
-    model=YOLO(args.weights)
-    _=model.predict(source=np.zeros((args.imgsz,args.imgsz,3),np.uint8), imgsz=args.imgsz, verbose=False)
+    yolo=YOLO(args.weights)
+    _=yolo.predict(source=np.zeros((args.imgsz,args.imgsz,3),np.uint8), imgsz=args.imgsz, verbose=False)
     print("✅ YOLO ready.")
 
     # 多进程 OCR
@@ -284,8 +261,7 @@ def main():
     worker=None
     if args.ocr:
         worker=mp.Process(target=ocr_worker, args=(input_q,output_q,ocr_backend,args.debug_ocr_once), daemon=True)
-        worker.start()
-        print(f"✅ OCR Worker started. backend={ocr_backend}")
+        worker.start(); print(f"✅ OCR Worker started. backend={ocr_backend}")
     else:
         print("ℹ️ OCR disabled (no --ocr)")
 
@@ -303,14 +279,13 @@ def main():
             frame=yuv if args.assume_bgr else cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)
 
             infer=cv2.resize(frame,(args.imgsz,args.imgsz), interpolation=cv2.INTER_LINEAR)
-            r=model.track(source=infer, imgsz=args.imgsz, conf=args.conf, verbose=False, persist=True)[0]
+            r=yolo.track(source=infer, imgsz=args.imgsz, conf=args.conf, verbose=False, persist=True)[0]
 
             det=0; low=False; ids=set()
             do_ocr = args.ocr and (frame_idx % args.ocr_every == 0)
             budget = args.ocr_budget if args.ocr else 0
 
             if r.boxes is not None and len(r.boxes)>0 and r.boxes.id is not None:
-                # 高置信度优先
                 order=np.argsort((-r.boxes.conf.cpu().numpy()).flatten())
                 for i in order:
                     b=r.boxes[int(i)]
@@ -324,14 +299,12 @@ def main():
                     tid=int(b.id[0]); ids.add(tid)
                     info=tracks.get(tid, {"model":"", "conf":0.0, "locked":False, "raw":"", "tried":False})
 
-                    # 调度OCR任务（在Worker处理，不阻塞）
                     if do_ocr and (not info["locked"]) and budget>0 and args.ocr:
                         pad=args.ocr_pad; w,h=X2-X1, Y2-Y1
                         px,py=int(w*pad),int(h*pad)
                         ox1,oy1=max(0,X1-px), max(0,Y1-py)
                         ox2,oy2=min(main_w,X2+px), min(main_h,Y2+py)
                         crop=frame[oy1:oy2, ox1:ox2]
-                        # 中心收缩，仅读表面文字
                         shrink=max(0.0, min(0.4, args.center_shrink))
                         cw,ch=ox2-ox1, oy2-oy1
                         cx1=ox1+int(cw*shrink); cy1=oy1+int(ch*shrink)
@@ -347,14 +320,11 @@ def main():
                             except queue.Full:
                                 pass
 
-                    # 显示颜色规则
                     label_model = info["model"] if info["model"] else "?"
-                    # 颜色：匹配=青色，不匹配=红色，未知=白
                     color=(255,255,255)
                     if expected_model:
-                        if info["model"] == expected_model: color=(255,255,0)  # Cyan (B,G,R)=(255,255,0)
+                        if info["model"] == expected_model: color=(255,255,0)
                         elif info["model"]: color=(0,0,255)
-
                     label=f"{label_model} | {conf:.2f}"
                     draw_box(frame, X1,Y1,X2,Y2, label, color)
                     if args.ocr_show_raw:
@@ -364,7 +334,6 @@ def main():
 
                     tracks[tid]=info
 
-            # 读取OCR结果（非阻塞）
             if args.ocr:
                 while True:
                     try:
@@ -374,23 +343,21 @@ def main():
                     tid=res['tid']
                     info=tracks.get(tid)
                     if info is None: continue
-                    model=res.get('model') or ""
+                    ocr_model=res.get('model') or ""
                     raw=res.get('raw') or ""
                     prob=float(res.get('prob') or 0.0)
                     info['raw']=raw if raw else info.get('raw','')
-                    if model and (prob>info['conf'] or not info['model']):
-                        info['model']=norm_model(model)
+                    if ocr_model and (prob>info['conf'] or not info['model']):
+                        info['model']=norm_model(ocr_model)
                         info['conf']=prob
                         if prob>=args.ocr_lock_conf:
                             info['locked']=True
                     tracks[tid]=info
                     total_ocr_ms+=float(res.get('ms',0.0)); ocr_runs+=1
 
-            # 清理离场的track
             for tid in [t for t in list(tracks.keys()) if t not in ids]:
                 tracks.pop(tid, None)
 
-            # HUD
             frame_idx+=1
             dt=(time.time()-t0)*1000.0
             fps=(1000.0/max(dt,1.0))
@@ -411,21 +378,19 @@ def main():
                 cv2.imshow("Battery+AsyncOCR", frame)
                 if cv2.waitKey(1)&0xFF==27: break
 
-            # 保存困难样本
             now=time.time()
             if (det==0 or low) and (now-last_save>1.0):
                 fn=f"hard_{det}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
                 cv2.imwrite(os.path.join(args.save_dir, fn), frame); last_save=now
 
     finally:
-        try: picam2.stop()
+        try: Picamera2().stop()
         except: pass
         if not args.headless: cv2.destroyAllWindows()
         if args.ocr and worker is not None and worker.is_alive():
             try:
                 input_q.put(None)
-                worker.terminate()  # 保守起见强停
-                worker.join(timeout=0.5)
+                worker.terminate(); worker.join(timeout=0.5)
             except Exception: pass
         el=time.time()-start
         print(f"\nFrames:{frame_idx} | Time:{el:.1f}s | FPS:{frame_idx/max(el,1):.1f}")
@@ -434,6 +399,4 @@ def main():
         print("Bye.")
 
 if __name__=="__main__":
-    # Linux/RPi 默认是 fork，足够稳定；保持默认即可。
-    # 如需显式： mp.set_start_method('fork', force=True)
     main()
