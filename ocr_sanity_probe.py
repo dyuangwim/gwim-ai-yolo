@@ -1,140 +1,168 @@
 #!/usr/bin/env python3
-# /home/pi/ocr_one_shot.py
-# 单张图 OCR (PaddleOCR 可选 + Tesseract)，仅用于验证“OCR 本身能不能读出 CRxxxx”。
+# /home/pi/ocr_one_shot_strong.py
+# 目的：对 test.jpg 进行强力预处理 + OCR，尽量把任意可读文本提取出来（不限定 CRxxxx）。
 
-import os, sys, re, argparse
+import os, sys, argparse, math
 import cv2
 import numpy as np
 
-RE_CR = re.compile(r"CR\s*(1616|1620|2016|2025|2032|1632|1650)", re.I)
-RE_DIG = re.compile(r"(1616|1620|2016|2025|2032|1632|1650)")
+def center_circle_mask(img, ratio=0.62):
+    h, w = img.shape[:2]
+    r = int(min(h, w) * ratio / 2) * 2
+    cx, cy = w // 2, h // 2
+    mask = np.zeros((h, w), np.uint8)
+    cv2.circle(mask, (cx, cy), r, 255, -1)
+    return mask
 
-def norm_model(text: str) -> str:
-    if not text: return ""
-    t = text.upper().replace(" ", "")
-    m = RE_CR.search(t) or RE_DIG.search(t)
-    return f"CR{m.group(1)}" if m else ""
+def suppress_glare(gray):
+    # 抑制高光：顶帽 & 限幅
+    # 1) 平滑
+    g = cv2.bilateralFilter(gray, d=7, sigmaColor=50, sigmaSpace=7)
+    # 2) 顶帽突出反光，再减去一部分
+    se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9,9))
+    top = cv2.morphologyEx(g, cv2.MORPH_TOPHAT, se)
+    sup = cv2.subtract(g, cv2.convertScaleAbs(top, alpha=0.7))
+    return sup
 
-def prep_variants(bgr):
-    """尽量简单但有效的几种增强：缩放->灰度->CLAHE->轻锐化->多阈值->(0°/180°)。"""
-    if bgr is None or bgr.size == 0:
-        return []
-    # 放大到宽不小于 640（Tesseract 对像素很敏感）
-    h, w = bgr.shape[:2]
-    if w < 640:
-        s = 640.0 / w
-        bgr = cv2.resize(bgr, (int(w*s), int(h*s)), interpolation=cv2.INTER_CUBIC)
-
-    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    clahe = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8,8))
+def enhance(gray):
+    # CLAHE + 锐化
+    clahe = cv2.createCLAHE(clipLimit=2.4, tileGridSize=(8,8))
     g = clahe.apply(gray)
     blur = cv2.GaussianBlur(g, (3,3), 0)
-    sharp = cv2.addWeighted(g, 1.25, blur, -0.25, 0)
+    sharp = cv2.addWeighted(g, 1.35, blur, -0.35, 0)
+    return sharp
 
-    # 试三种二值化
+def variants_from(bgr):
+    # 1) 中心裁方形 + 圆形遮罩（屏蔽外圈凹坑与塑料边）
+    h, w = bgr.shape[:2]
+    s = min(h, w)
+    x0, y0 = (w - s)//2, (h - s)//2
+    sq = bgr[y0:y0+s, x0:x0+s].copy()
+
+    # 2) 放大到宽 1200（Tesseract 很吃分辨率）
+    if s < 1200:
+        scale = 1200.0 / s
+        sq = cv2.resize(sq, (int(s*scale), int(s*scale)), interpolation=cv2.INTER_CUBIC)
+
+    gray = cv2.cvtColor(sq, cv2.COLOR_BGR2GRAY)
+
+    # 3) 圆形遮罩
+    mask = center_circle_mask(gray, ratio=0.88)
+    gray = cv2.bitwise_and(gray, mask)
+
+    # 4) 抑制高光 + 增强
+    sup = suppress_glare(gray)
+    sharp = enhance(sup)
+
+    # 5) 多种二值化
     _, otsu = cv2.threshold(sharp, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
     inv  = cv2.bitwise_not(otsu)
     ada  = cv2.adaptiveThreshold(sharp,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                  cv2.THRESH_BINARY, 31, 7)
-
-    # 轻形态学，压噪点
+    # 轻形态学（去椒盐）
     k = cv2.getStructuringElement(cv2.MORPH_RECT, (2,2))
     otsu = cv2.morphologyEx(otsu, cv2.MORPH_OPEN, k, iterations=1)
     ada  = cv2.morphologyEx(ada,  cv2.MORPH_OPEN, k, iterations=1)
 
-    # 0°/180° 两个角度都跑（电池常倒置）
-    def to_rgb(x): return cv2.cvtColor(x, cv2.COLOR_GRAY2RGB)
-    vars_ = []
-    for img in [sharp, otsu, inv, ada]:
-        rgb0 = to_rgb(img)
-        rgb180 = cv2.rotate(rgb0, cv2.ROTATE_180)
-        vars_.extend([rgb0, rgb180])
-    return vars_
+    # 6) 生成 RGB 及 180° 旋转版本
+    outs = []
+    for g in [sharp, otsu, inv, ada]:
+        rgb0 = cv2.cvtColor(g, cv2.COLOR_GRAY2RGB)
+        rgb1 = cv2.rotate(rgb0, cv2.ROTATE_180)
+        outs.extend([rgb0, rgb1])
 
-def ocr_with_paddle(img_rgb):
-    """若 PaddleOCR 可用则读取一遍；否则返回不可用状态。"""
+    # 7) 额外提供一个“强对比”版本
+    strong = cv2.convertScaleAbs(sharp, alpha=1.6, beta=-20)
+    strong = cv2.cvtColor(strong, cv2.COLOR_GRAY2RGB)
+    outs.append(strong)
+    return outs
+
+def run_tesseract(imgs):
+    try:
+        import pytesseract
+    except Exception as e:
+        return ["[TESS] INIT_FAIL: "+str(e)]
+
+    # 多种 PSM 尝试：6=单块文字；7=单行；11=稀疏文本；13=原始；都测一遍
+    psms = [6, 7, 11, 13]
+    results = []
+    for idx, im in enumerate(imgs):
+        gray = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
+        for psm in psms:
+            cfg = f'--oem 1 --psm {psm}'
+            try:
+                txt = pytesseract.image_to_string(gray, config=cfg)
+                txt = txt.replace('\n', ' ').strip()
+                if txt:
+                    results.append(f"[TESS][v{idx:02d} psm{psm}] {txt}")
+            except Exception:
+                pass
+    if not results:
+        results = ["[TESS] (no text)"]
+    return results
+
+def run_paddle(imgs):
+    # Paddle 在你机子上参数经常不兼容，这里只做“能用就用”
     try:
         from paddleocr import PaddleOCR
-        # 不传 use_onnx —— 你的环境报过 Unknown argument: use_onnx
-        ocr = PaddleOCR(lang='en', use_angle_cls=False, det=False, rec=True)
+        ocr = PaddleOCR(lang='en')  # 不传 det/rec/use_angle_cls 等参数
     except Exception as e:
-        return False, f"[PADDLE] INIT_FAIL: {e}", "", 0.0
+        return [f"[PADDLE] INIT_FAIL: {e}"]
 
-    variants = prep_variants(cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR))
-    best_raw, best_conf = "", 0.0
-    for v in variants:
+    outs = []
+    for idx, im in enumerate(imgs):
         try:
-            res = ocr.ocr(v)
-            # 兼容多种返回结构
-            if isinstance(res, list) and len(res) == 1 and isinstance(res[0], list):
+            res = ocr.ocr(im)
+            # 解析结果
+            lines = []
+            if isinstance(res, list) and len(res)==1 and isinstance(res[0], list):
                 res = res[0]
-            texts, probs = [], []
             if isinstance(res, list):
                 for it in res:
                     if isinstance(it, dict):
                         t = it.get('text') or it.get('transcription') or it.get('label') or ''
-                        c = it.get('score') or it.get('confidence') or it.get('prob') or 0.0
-                        if t: texts.append(str(t).strip()); probs.append(float(c) if c else 0.0)
-                    elif isinstance(it, (list, tuple)) and len(it) >= 2:
+                        if t: lines.append(t)
+                    elif isinstance(it, (list,tuple)) and len(it)>=2:
                         cand = it[1]
-                        if isinstance(cand, (list, tuple)) and len(cand) >= 2 and isinstance(cand[0], str):
-                            texts.append(cand[0].strip()); probs.append(float(cand[1]) if len(cand)>1 else 0.0)
-            raw = " ".join(texts).upper()
-            conf = max(probs) if probs else 0.0
-            if conf > best_conf:
-                best_conf, best_raw = conf, raw
+                        if isinstance(cand,(list,tuple)) and len(cand)>=1 and isinstance(cand[0],str):
+                            lines.append(cand[0])
+            txt = " ".join(lines).strip()
+            if txt:
+                outs.append(f"[PADDLE][v{idx:02d}] {txt}")
         except Exception:
             pass
-    return True, best_raw, norm_model(best_raw), float(best_conf)
-
-def ocr_with_tesseract(img_rgb):
-    try:
-        import pytesseract
-    except Exception as e:
-        return False, f"[TESS] INIT_FAIL: {e}", "", 0.0
-
-    variants = prep_variants(cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR))
-    best_raw, best_score = "", -1e9
-    for v in variants:
-        gray = cv2.cvtColor(v, cv2.COLOR_RGB2GRAY)
-        # psm 6：假设是一行/少量文本；白名单：只允许 CR 和数字与点
-        cfg = '--psm 6 -c tessedit_char_whitelist=CR0123456789.'
-        try:
-            data = pytesseract.image_to_data(gray, output_type=pytesseract.Output.DICT, config=cfg)
-            txt = " ".join([w for w in data.get("text", []) if w]).upper()
-            # 简单打分：命中CR优先 + 长度微奖分
-            score = (100 if RE_CR.search(txt) else (60 if RE_DIG.search(txt) else 0)) + min(len(txt), 40) * 0.5
-            if score > best_score:
-                best_score, best_raw = score, txt
-        except Exception:
-            pass
-    return True, best_raw, norm_model(best_raw), 0.0
+    if not outs:
+        outs = ["[PADDLE] (no text)"]
+    return outs
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--img", default="test.jpg", help="path to image (default: ./test.jpg)")
+    ap.add_argument("--img", default="test.jpg", help="path to image")
+    ap.add_argument("--save-debug", action="store_true", help="save preprocessed variants to ./_debug_ocr")
     args = ap.parse_args()
 
     if not os.path.isfile(args.img):
-        print(f"Image not found: {args.img}")
-        sys.exit(1)
-
+        print("Image not found:", args.img); sys.exit(1)
     bgr = cv2.imread(args.img)
     if bgr is None:
         print("Failed to read image"); sys.exit(1)
-    rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
 
-    okP, rawP, modelP, probP = ocr_with_paddle(rgb)
-    if okP:
-        print(f"[PADDLE] model={modelP or '?'} | prob={probP:.3f} | raw={rawP}")
-    else:
-        print(rawP)  # INIT_FAIL reason
+    vars_ = variants_from(bgr)
+    if args.save_debug:
+        os.makedirs("_debug_ocr", exist_ok=True)
+        for i, im in enumerate(vars_):
+            cv2.imwrite(os.path.join("_debug_ocr", f"v{i:02d}.png"), cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
+        print(f"saved {_debug_count(len(vars_))} variants into ./_debug_ocr")
 
-    okT, rawT, modelT, _ = ocr_with_tesseract(rgb)
-    if okT:
-        print(f"[TESS ] model={modelT or '?'} | raw={rawT}")
-    else:
-        print(rawT)
+    print(">>> Tesseract results")
+    for line in run_tesseract(vars_):
+        print(line)
+
+    print("\n>>> Paddle results")
+    for line in run_paddle(vars_):
+        print(line)
+
+def _debug_count(n): return n
 
 if __name__ == "__main__":
     main()
