@@ -1,15 +1,18 @@
 # detect_pi_2_ocr_async.py — RPi5 YOLO (NCNN) + Async OCR (PaddleOCR→fallback Tesseract)
-# 修复：避免把 YOLO 模型变量与 OCR 文本变量同名（导致 'str' 没有 track）；
-#       PaddleOCR 某些版本不支持 use_onnx，自动降级到兼容构造或 Tesseract。
-#       继续保留：限额+锁定/中心收缩ROI/16颗批量/颜色规则。
+# 超级完整/稳态版：
+# - 修正：变量名冲突、摄像头优雅退出（不再 Picamera2().stop() 造成 allocator 异常）、
+#         PaddleOCR 参数兼容（去掉 use_onnx/use_textline_orientation 冲突）、
+#         Ctrl+C 时顺序关停（先停主循环→送毒丸→join worker→停相机）。
+# - 稳帧：每 N 帧调度 + 每批限额K + 置信度锁定；中心收缩ROI；HUD 显示 OCR 统计。
+# - 仅做“型号匹配”（不做版本），匹配=青色，不匹配=红色，未知=白。
 #
-# 用法（示例）：
+# 运行示例：
 #   python3 detect_pi_2_ocr_async.py \
-#       --weights /home/pi/models/best_ncnn_model \
-#       --imgsz 320 --conf 0.30 --expected_model CR2025 --ocr --ocr_every 8 \
-#       --ocr_budget 2 --ocr_lock_conf 0.55 --center_shrink 0.18 --preview
+#     --weights /home/pi/models/best_ncnn_model --imgsz 320 --conf 0.30 \
+#     --expected_model CR2025 --ocr --ocr_every 8 --ocr_budget 2 \
+#     --ocr_lock_conf 0.55 --center_shrink 0.18 --preview
 
-import os, time, argparse, re
+import os, time, argparse, re, signal
 from datetime import datetime
 import cv2, numpy as np
 from ultralytics import YOLO
@@ -18,8 +21,8 @@ import multiprocessing as mp
 import queue
 
 # ---------- 型号解析 ----------
-RE_CR     = re.compile(r"CR\s*(1616|1620|2016|2025|2032|1650)", re.I)
-RE_DIGITS = re.compile(r"(1616|1620|2016|2025|2032|1650)")
+RE_CR     = re.compile(r"CR\s*(1616|1620|2016|2025|2032|1650|1632)", re.I)
+RE_DIGITS = re.compile(r"(1616|1620|2016|2025|2032|1650|1632)")
 
 def norm_model(s: str) -> str:
     if not s: return ""
@@ -42,6 +45,7 @@ def parse_args():
 
     # OCR 调度
     ap.add_argument("--ocr", action="store_true")
+    ap.add_argument("--ocr_backend", choices=["AUTO","PADDLE","TESSERACT"], default="AUTO")
     ap.add_argument("--ocr_every", type=int, default=8)
     ap.add_argument("--ocr_budget", type=int, default=2)
     ap.add_argument("--ocr_lock_conf", type=float, default=0.55)
@@ -108,31 +112,20 @@ def prep_roi_for_ocr(bgr, max_w=320, gamma=1.1):
 
 
 def _call_paddle_ocr(ocr, rgb_img):
-    if hasattr(ocr,"predict"): return ocr.predict(rgb_img)
-    return ocr.ocr(rgb_img)
+    return ocr.ocr(rgb_img, det=False, rec=True, cls=False)
 
 
 def _parse_ocr_result(res):
     texts, probs=[], []
     if res is None: return texts, probs
-    # 兼容不同返回结构
     if isinstance(res, list) and len(res)==1 and isinstance(res[0], list):
         res=res[0]
     if isinstance(res, list) and len(res)>0 and isinstance(res[0], dict):
         for item in res:
-            if "rec" in item and isinstance(item["rec"], (list,tuple)):
-                for r in item["rec"]:
-                    if isinstance(r,(list,tuple)) and len(r)>=2:
-                        texts.append(str(r[0]).strip()); probs.append(float(r[1]) if len(r)>1 else 0.0)
-            elif "rec_res" in item and isinstance(item["rec_res"], (list,tuple)):
-                for r in item["rec_res"]:
-                    if isinstance(r,(list,tuple)) and len(r)>=2:
-                        texts.append(str(r[0]).strip()); probs.append(float(r[1]) if len(r)>1 else 0.0)
-            else:
-                txt=item.get('text') or item.get('transcription') or item.get('label') or ""
-                sc =item.get('score') or item.get('confidence') or item.get('prob') or 0.0
-                if txt:
-                    texts.append(str(txt).strip()); probs.append(float(sc) if sc else 0.0)
+            txt=item.get('text') or item.get('transcription') or item.get('label') or ""
+            sc =item.get('score') or item.get('confidence') or item.get('prob') or 0.0
+            if txt:
+                texts.append(str(txt).strip()); probs.append(float(sc) if sc else 0.0)
         return texts, probs
     if isinstance(res, list):
         for it in res:
@@ -184,15 +177,11 @@ def tesseract_ocr_once(bgr_img):
 
 
 def ocr_worker(input_q: mp.Queue, output_q: mp.Queue, backend: str, debug_once: bool=False):
-    """独立进程：初始化OCR后循环消费任务。"""
     ocr=None; backend_used="OFF"
-    if backend.upper()=="PADDLE":
+    if backend.upper() in ("AUTO","PADDLE"):
         try:
             from paddleocr import PaddleOCR
-            try:
-                ocr=PaddleOCR(use_textline_orientation=False, lang='en', use_angle_cls=False)
-            except TypeError:
-                ocr=PaddleOCR(lang='en')
+            ocr=PaddleOCR(lang='en', use_angle_cls=False)
             backend_used="PADDLE"; print("[OCR-Worker] PaddleOCR init OK")
         except Exception as e:
             print("[OCR-Worker] Paddle init failed, fallback to Tesseract:", e)
@@ -213,7 +202,7 @@ def ocr_worker(input_q: mp.Queue, output_q: mp.Queue, backend: str, debug_once: 
             if backend_used=="PADDLE" and ocr is not None:
                 rgb0, rgb180, _, _ = prep_roi_for_ocr(crop, max_w=320, gamma=1.1)
                 if rgb0 is None:
-                    ran, model_out, raw, prob = True, "", "", 0.0
+                    model_out, raw, prob = "", "", 0.0
                 else:
                     _, m0, raw0, p0 = paddle_ocr_once(ocr, rgb0, debug_once=debug_once)
                     _, m1, raw1, p1 = paddle_ocr_once(ocr, rgb180, debug_once=False)
@@ -230,7 +219,7 @@ def ocr_worker(input_q: mp.Queue, output_q: mp.Queue, backend: str, debug_once: 
 
 def main():
     args=parse_args()
-    # 性能环境
+
     os.environ["OMP_NUM_THREADS"]=str(args.threads)
     os.environ["NCNN_THREADS"]=str(args.threads)
     os.environ.setdefault("OPENBLAS_NUM_THREADS","1")
@@ -241,41 +230,45 @@ def main():
 
     expected_model=norm_model(args.expected_model)
 
-    # Camera
     picam2=Picamera2()
     main_w, main_h=1280, 960
     cfg=(picam2.create_preview_configuration if args.preview else picam2.create_video_configuration)(
         main={"size":(main_w,main_h),"format":"YUV420"}, controls={"FrameRate":30})
     picam2.configure(cfg); picam2.start(); time.sleep(1.0)
 
-    # YOLO 模型（用 yolo 变量名，避免与 OCR 文本混名）
     print("Loading YOLO…")
     yolo=YOLO(args.weights)
     _=yolo.predict(source=np.zeros((args.imgsz,args.imgsz,3),np.uint8), imgsz=args.imgsz, verbose=False)
     print("✅ YOLO ready.")
 
-    # 多进程 OCR
     input_q=mp.Queue(maxsize=32)
     output_q=mp.Queue(maxsize=64)
-    ocr_backend = "PADDLE" if args.ocr else "OFF"
+    backend = ("PADDLE" if args.ocr_backend=="PADDLE" else ("TESSERACT" if args.ocr_backend=="TESSERACT" else "AUTO"))
     worker=None
     if args.ocr:
-        worker=mp.Process(target=ocr_worker, args=(input_q,output_q,ocr_backend,args.debug_ocr_once), daemon=True)
-        worker.start(); print(f"✅ OCR Worker started. backend={ocr_backend}")
+        worker=mp.Process(target=ocr_worker, args=(input_q,output_q,backend,args.debug_ocr_once), daemon=True)
+        worker.start(); print(f"✅ OCR Worker started. backend={backend}")
     else:
         print("ℹ️ OCR disabled (no --ocr)")
 
-    # 运行时状态
-    tracks={}  # tid -> {model, conf, locked, raw, tried}
+    tracks={}
     sx, sy=main_w/float(args.imgsz), main_h/float(args.imgsz)
     fps_hist=[]; frame_idx=0; start=time.time()
     last_save=0.0
     total_ocr_ms=0.0; ocr_runs=0; ocr_calls_total=0
 
+    stop_flag=[False]
+    def handle_sigint(sig,frame):
+        stop_flag[0]=True
+    signal.signal(signal.SIGINT, handle_sigint)
+
     try:
-        while True:
+        while not stop_flag[0]:
             t0=time.time()
-            yuv=picam2.capture_array("main")
+            try:
+                yuv=picam2.capture_array("main")
+            except Exception:
+                continue
             frame=yuv if args.assume_bgr else cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)
 
             infer=cv2.resize(frame,(args.imgsz,args.imgsz), interpolation=cv2.INTER_LINEAR)
@@ -343,12 +336,12 @@ def main():
                     tid=res['tid']
                     info=tracks.get(tid)
                     if info is None: continue
-                    ocr_model=res.get('model') or ""
+                    ocr_text=res.get('model') or ""
                     raw=res.get('raw') or ""
                     prob=float(res.get('prob') or 0.0)
                     info['raw']=raw if raw else info.get('raw','')
-                    if ocr_model and (prob>info['conf'] or not info['model']):
-                        info['model']=norm_model(ocr_model)
+                    if ocr_text and (prob>info['conf'] or not info['model']):
+                        info['model']=norm_model(ocr_text)
                         info['conf']=prob
                         if prob>=args.ocr_lock_conf:
                             info['locked']=True
@@ -384,13 +377,19 @@ def main():
                 cv2.imwrite(os.path.join(args.save_dir, fn), frame); last_save=now
 
     finally:
-        try: Picamera2().stop()
-        except: pass
-        if not args.headless: cv2.destroyAllWindows()
         if args.ocr and worker is not None and worker.is_alive():
             try:
                 input_q.put(None)
-                worker.terminate(); worker.join(timeout=0.5)
+                worker.join(timeout=1.0)
+            except Exception:
+                try: worker.terminate()
+                except Exception: pass
+        try:
+            picam2.stop(); picam2.close()
+        except Exception:
+            pass
+        if not args.headless:
+            try: cv2.destroyAllWindows()
             except Exception: pass
         el=time.time()-start
         print(f"\nFrames:{frame_idx} | Time:{el:.1f}s | FPS:{frame_idx/max(el,1):.1f}")
