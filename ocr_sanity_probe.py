@@ -39,15 +39,15 @@ def prep_variants(bgr, max_w=480):
 def run_paddle(img, use_onnx=False):
     try:
         from paddleocr import PaddleOCR
-        ocr = PaddleOCR(lang='en', use_angle_cls=False, det=False, rec=True, use_onnx=use_onnx)
+        # 不要传 use_onnx；某些版本没有这个参数
+        ocr = PaddleOCR(lang='en', use_angle_cls=False, det=False, rec=True)
     except Exception as e:
         return False, f"Paddle init fail: {e}", "", 0.0
     variants = prep_variants(img)
     best_raw, best_conf = "", 0.0
     for v in variants:
         try:
-            res = ocr.ocr(v)  # 兼容多种返回格式
-            # 解析（你的异步/fast文件也做了健壮解析）
+            res = ocr.ocr(v)
             texts, probs = [], []
             if isinstance(res, list) and len(res)==1 and isinstance(res[0], list):
                 res = res[0]
@@ -65,7 +65,7 @@ def run_paddle(img, use_onnx=False):
             conf = max(probs) if probs else 0.0
             if conf > best_conf:
                 best_conf, best_raw = conf, raw
-        except Exception as e:
+        except Exception:
             pass
     return True, best_raw, norm_model(best_raw), float(best_conf)
 
@@ -124,3 +124,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
