@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-# /home/pi/ocr_try_lite.py
-# Goal: 针对 test.jpg（或任意图）进行“强预处理 + 轻量OCR”，优先 RapidOCR(ONNX, PPOCRv4-mobile)，
-#       回退 PaddleOCR（若安装成功），再回退 Tesseract。输出原文方便你校对。
+# /home/pi/ocr_lite_clean.py
+# 使用 RapidOCR-ONNX（PaddleOCR Lite 模型）+ 针对金属电池的预处理，
+# 自动挑选最佳候选并做文本清洗，输出干净的结果。
+# 依赖：pip install rapidocr-onnxruntime opencv-python numpy
 
-import os, sys, argparse
+import os, sys, re, argparse
 import cv2
 import numpy as np
 
-def center_circle_mask(img, ratio=0.90):
+RE_CR = re.compile(r"\bCR\s*([12][06]16|2016|2025|2032|1632|1650)\b", re.I)  # 支持常见型号
+RE_EN = re.compile(r"\bENERGIZER\b", re.I)
+
+def center_circle_mask(img, ratio=0.92):
     h, w = img.shape[:2]
     r = int(min(h, w) * ratio / 2)
     mask = np.zeros((h, w), np.uint8)
@@ -15,21 +19,19 @@ def center_circle_mask(img, ratio=0.90):
     return mask
 
 def suppress_glare(gray):
-    # 双边 + 顶帽抑制高光
     g = cv2.bilateralFilter(gray, d=7, sigmaColor=50, sigmaSpace=7)
     se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9,9))
     top = cv2.morphologyEx(g, cv2.MORPH_TOPHAT, se)
     return cv2.subtract(g, cv2.convertScaleAbs(top, alpha=0.9))
 
 def enhance(gray):
-    # CLAHE + 锐化
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     g = clahe.apply(gray)
     blur = cv2.GaussianBlur(g, (3,3), 0)
     return cv2.addWeighted(g, 1.35, blur, -0.35, 0)
 
 def make_variants(bgr):
-    # 居中裁成正方形并放大到 1200
+    # 居中裁正方形 + 放大到宽≥1200（小字对OCR很关键）
     h, w = bgr.shape[:2]
     s = min(h, w)
     x0, y0 = (w - s)//2, (h - s)//2
@@ -39,21 +41,16 @@ def make_variants(bgr):
         sq = cv2.resize(sq, (int(s*scale), int(s*scale)), interpolation=cv2.INTER_CUBIC)
 
     gray = cv2.cvtColor(sq, cv2.COLOR_BGR2GRAY)
-    # 圆形遮罩（屏蔽外圈塑料/凹坑）
-    mask = center_circle_mask(gray, ratio=0.92)
-    gray = cv2.bitwise_and(gray, mask)
+    gray = cv2.bitwise_and(gray, center_circle_mask(gray, ratio=0.92))  # 只读电池面
 
-    # 抑制高光 + 增强
     sup   = suppress_glare(gray)
     sharp = enhance(sup)
 
-    # 多种阈值化
     _, otsu = cv2.threshold(sharp, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    inv  = cv2.bitwise_not(otsu)
-    ada  = cv2.adaptiveThreshold(sharp,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                 cv2.THRESH_BINARY, 41, 5)
+    inv    = cv2.bitwise_not(otsu)
+    ada    = cv2.adaptiveThreshold(sharp,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                   cv2.THRESH_BINARY, 41, 5)
 
-    # 轻开运算去噪
     k = cv2.getStructuringElement(cv2.MORPH_RECT, (2,2))
     otsu = cv2.morphologyEx(otsu, cv2.MORPH_OPEN, k, iterations=1)
     ada  = cv2.morphologyEx(ada,  cv2.MORPH_OPEN, k, iterations=1)
@@ -64,86 +61,68 @@ def make_variants(bgr):
         rgb1 = cv2.rotate(rgb0, cv2.ROTATE_180)
         outs.extend([rgb0, rgb1])
 
-    # 额外强对比一版
     strong = cv2.convertScaleAbs(sharp, alpha=1.6, beta=-15)
     outs.append(cv2.cvtColor(strong, cv2.COLOR_GRAY2RGB))
-    return outs  # [RGB图...]
+    return outs
 
-def try_rapidocr(imgs):
-    try:
-        from rapidocr_onnxruntime import RapidOCR
-    except Exception as e:
-        return ["[RapidOCR] NOT_AVAILABLE: " + str(e)]
-    ocr = RapidOCR()  # 第一次会自动下模型
-    outs = []
+def normalize_text(t: str) -> str:
+    # 修正常见误读：O/0, S/5, Z/2, G/6, I/1 等，仅对短串做最小替换
+    s = t.upper()
+    # 先修CR型号串附近的易错
+    s = re.sub(r"CR20Z5", "CR2025", s)
+    s = re.sub(r"CR20S5", "CR2025", s)
+    s = re.sub(r"CR203S", "CR2035", s)  # 以防万一
+    s = s.replace("CR2O25", "CR2025").replace("CR2O32","CR2032")  # O→0
+    s = s.replace("CR20S5", "CR2025").replace("CR203S","CR2035")
+    # 品牌常见花样
+    s = s.replace("ENERGIZERS", "ENERGIZER").replace("ENERGIZER®", "ENERGIZER")
+    return s
+
+def score_text(txt: str, conf: float) -> float:
+    # 打分：包含CR型号加分、包含ENERGIZER加分、长度适中加分、引擎置信度加权
+    txtU = txt.upper()
+    score = 0.0
+    if RE_CR.search(txtU): score += 4.0
+    if RE_EN.search(txtU): score += 2.0
+    L = len(txtU)
+    if 6 <= L <= 40: score += 1.0
+    score += min(max(conf, 0.0), 1.0) * 2.0  # 置信度（0~1）*2
+    return score
+
+def run_rapidocr_variants(imgs):
+    from rapidocr_onnxruntime import RapidOCR
+    ocr = RapidOCR()
+    best = ("", 0.0, -1)  # (text, score, idx)
+    all_lines = []
+
     for i, im in enumerate(imgs):
         try:
-            res, _ = ocr(im)  # 返回 [ [ (box, text, score), ... ] ]
+            res, _ = ocr(im)  # -> [ [(box, text, score), ...] ]
+            if not res: continue
+            # 聚合该 variant 的文字
             texts = []
-            for item in (res or []):
-                if isinstance(item, (list, tuple)) and len(item) >= 2:
-                    t = item[1]
-                    if t: texts.append(t)
-            txt = " ".join(texts).strip()
-            if txt:
-                outs.append(f"[RapidOCR][v{i:02d}] {txt}")
+            confs = []
+            for item in res:
+                if isinstance(item, (list, tuple)) and len(item) >= 3:
+                    t = str(item[1]).strip()
+                    c = float(item[2]) if item[2] is not None else 0.0
+                    if t:
+                        texts.append(t); confs.append(c)
+            if not texts: continue
+            raw = normalize_text(" ".join(texts))
+            conf = max(confs) if confs else 0.0
+            sc = score_text(raw, conf)
+            all_lines.append((i, raw, conf, sc))
+            if sc > best[1]:
+                best = (raw, sc, i)
         except Exception:
-            pass
-    return outs or ["[RapidOCR] (no text)"]
-
-def try_paddle(imgs):
-    try:
-        from paddleocr import PaddleOCR
-        ocr = PaddleOCR(lang='en')  # 简单初始化，避免参数兼容问题
-    except Exception as e:
-        return ["[PaddleOCR] NOT_AVAILABLE: " + str(e)]
-    outs = []
-    for i, im in enumerate(imgs):
-        try:
-            res = ocr.ocr(im)
-            # 统一解析
-            if isinstance(res, list) and len(res)==1 and isinstance(res[0], list):
-                res = res[0]
-            lines = []
-            if isinstance(res, list):
-                for it in res:
-                    if isinstance(it, dict):
-                        t = it.get('text') or it.get('transcription') or it.get('label') or ''
-                        if t: lines.append(t)
-                    elif isinstance(it, (list, tuple)) and len(it)>=2:
-                        cand = it[1]
-                        if isinstance(cand, (list,tuple)) and len(cand)>=1 and isinstance(cand[0], str):
-                            lines.append(cand[0])
-            txt = " ".join(lines).strip()
-            if txt:
-                outs.append(f"[PaddleOCR][v{i:02d}] {txt}")
-        except Exception:
-            pass
-    return outs or ["[PaddleOCR] (no text)"]
-
-def try_tesseract(imgs):
-    try:
-        import pytesseract
-    except Exception as e:
-        return ["[Tesseract] NOT_AVAILABLE: " + str(e)]
-    psms = [6, 7, 11, 13]
-    outs = []
-    for i, im in enumerate(imgs):
-        gray = cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
-        for p in psms:
-            try:
-                txt = pytesseract.image_to_string(gray, config=f"--oem 3 --psm {p}")
-                txt = txt.replace("\n", " ").strip()
-                if txt:
-                    outs.append(f"[Tesseract][v{i:02d} psm{p}] {txt}")
-            except Exception:
-                pass
-    return outs or ["[Tesseract] (no text)"]
+            continue
+    return best, all_lines
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--img", default="test.jpg", help="image path")
-    ap.add_argument("--save-debug", action="store_true", help="save variants to ./_lite_debug")
+    ap.add_argument("--save-debug", action="store_true", help="save preprocessed variants to ./_lite_debug_best")
     args = ap.parse_args()
 
     if not os.path.isfile(args.img):
@@ -153,23 +132,25 @@ def main():
         print("Failed to read image"); sys.exit(1)
 
     variants = make_variants(bgr)
-    if args.save_debug:
-        os.makedirs("_lite_debug", exist_ok=True)
+    best, lines = run_rapidocr_variants(variants)  # (text, score, idx)
+
+    if args.save-debug or args.save_debug:
+        os.makedirs("_lite_debug_best", exist_ok=True)
         for i, im in enumerate(variants):
-            cv2.imwrite(os.path.join("_lite_debug", f"v{i:02d}.png"), cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
-        print(f"Saved {len(variants)} variants to ./_lite_debug")
+            cv2.imwrite(os.path.join("_lite_debug_best", f"v{i:02d}.png"),
+                        cv2.cvtColor(im, cv2.COLOR_RGB2BGR))
 
-    print(">>> RapidOCR (Paddle Lite models via ONNX)")
-    for line in try_rapidocr(variants):
-        print(line)
+    # 打印候选Top（按分数降序）
+    lines_sorted = sorted(lines, key=lambda x: x[3], reverse=True)[:6]
+    print("Top candidates (idx, conf, score, text):")
+    for i, raw, conf, sc in lines_sorted:
+        print(f"[v{i:02d}] conf={conf:.3f} score={sc:.2f} :: {raw}")
 
-    print("\n>>> PaddleOCR (if installed)")
-    for line in try_paddle(variants):
-        print(line)
-
-    print("\n>>> Tesseract (fallback)")
-    for line in try_tesseract(variants):
-        print(line)
+    if best[2] >= 0:
+        print("\nBEST:")
+        print(f"[v{best[2]:02d}] {best[0]}")
+    else:
+        print("No text found by RapidOCR")
 
 if __name__ == "__main__":
     main()
