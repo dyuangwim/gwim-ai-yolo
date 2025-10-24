@@ -1,37 +1,44 @@
-(ai-env) pi@raspberrypi:~ $ python3 /home/pi/ocr_sanity_probe.py --img /home/pi/ocr_dumps/test.jpg --save-debug
-saved 9 variants into ./_debug_ocr
->>> Tesseract results
-[TESS][v00 psm6] 26. + > 5) A 2 c Xx ta? 5 < ~ a
-[TESS][v00 psm7] | ‘ >
-[TESS][v00 psm11] 7  > \,  CR2025  at  S.
-[TESS][v00 psm13] )
-[TESS][v01 psm6] A a re ere ry " stozus - “SS 7 pA
-[TESS][v01 psm11] SS :  Lot  —  lJ  St0zu  7
-[TESS][v01 psm13] 2
-[TESS][v02 psm6] - 582038 ‘N | TOKEN, < y wad - N“ al
-[TESS][v02 psm7] | ‘ >
-[TESS][v02 psm11] qk  S \  R2038  &  1st  ON
-[TESS][v02 psm13] e)
-[TESS][v03 psm6] Pe  - ‘ 4 wes NW ' we" ) v sf0zu> - \Ng T 4
-[TESS][v03 psm7] © :
-[TESS][v03 psm11] Ww ‘  al |  st0ze%  i  ,’
-[TESS][v03 psm13] =)
-[TESS][v04 psm6] rah -a > \ Epa ois - ( y wad = ~~. al
-[TESS][v04 psm7] | ‘ >
-[TESS][v04 psm11] qk  S \  CR2038  1a  ON
-[TESS][v04 psm13] s)
-[TESS][v05 psm6] AA NG et an 7 stozu> : \N T
-[TESS][v05 psm11] WN ‘  oad |  >~  lJ”  st0te  ,’
-[TESS][v05 psm13] 2
-[TESS][v06 psm6] pm wy ™~ (Z ¢ an ban me , ie a ANS Soh og GA eS a vor . - L., Se ‘ ae rr oy) -\ | Speers “N\A i — - +f ¥* = ) 7 jes of as ae UL EUPIA: oy —. Jim e 2 | ry ene ir 7 : } ; Ne : wo agit +h see an ged .* Bes ‘Sa : oy oF f 4 C) 0 INS SS ete
-[TESS][v06 psm11] Ve  On ej  qa  ~a™  » “.  Syd  a’  ae  “YN  es  i tal  2  o.!  Me  a  \  + Jf ¥*  fe  od  -\  (7)  le  HB  2 |  0  “h  a a)  pu,  Ly ber  ,o  Jit  vA  Pe  ae  ee ‘  3,  Oa  o\ ON  — ZF ow  <>  Bee ie  fa,
-[TESS][v06 psm13] =
-[TESS][v07 psm6] Te “~ ~~  | RETA T SSN NS  “4 Cc aN, ; “  ge &. oS eae St ae yo ‘ne ah ¢  ES wishes 7 ‘at  Ne oe . | At ° iP e¢ ooray st (le / | >) 8 be * - a La 7 3}, RAO roy i) eS -> f. fot BIA a} Vo RA oe ra te ae Se Ss  "« ~~ a y - . ( a  XN pe 8 , es ; a:  \\M 7 a YN - a we” ad  SO UTP at? ney  Ne . ee Dae eo A . . als aU A eA) ~ . . me o” . ae
-[TESS][v07 psm11] ae ee  -.  Oe  '¢  me Te Ke UA  =.)  a, uN \  2 4  CVF:  7  @i  iy  hf  ‘nt  { /  Pe  i.  at  a /  Y-  ae  vot  Senne  ant  eC)  wt wS  v4  Vc  . od  ef  ~7  a:  ig  J!  \  \,  NY  mE a  to.  vd  Pal  r* >;  wf &  I a  ep)  on. om.
-[TESS][v07 psm13] =
-[TESS][v08 psm6] 7 Sat os ; S CR2025 2\ c ‘ : y 4 J au) ty  Ser
-[TESS][v08 psm11] 7  CR2025 a  a  tae  _,  SS
-[TESS][v08 psm13] )
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/ocr_try_lite.py --img /home/pi/ocr_dumps/test.jpg --save-debug
+Saved 9 variants to ./_lite_debug
+>>> RapidOCR (Paddle Lite models via ONNX)
+[RapidOCR][v00] CR2025 Energizer C
+[RapidOCR][v01] DR Energizers CR2025
+[RapidOCR][v02] CR202S n
+[RapidOCR][v03] Ena
+[RapidOCR][v04] CR2025 Ene
+[RapidOCR][v06] GR2025 Tierg! 1288
+[RapidOCR][v07] elazibial
+[RapidOCR][v08] CR2025 Energizers
 
->>> Paddle results
-[PADDLE] INIT_FAIL: No module named 'paddle'
+>>> PaddleOCR (if installed)
+[PaddleOCR] NOT_AVAILABLE: No module named 'paddle'
+
+>>> Tesseract (fallback)
+[Tesseract][v00 psm6] c to tt , > eek 5 ‘Gan 12) a
+[Tesseract][v00 psm11] Gs  CR2025  ic  ee  eed
+[Tesseract][v00 psm13] SS
+[Tesseract][v01 psm6] SCOzZeD 4 O15 wy
+[Tesseract][v01 psm11] sq  *  ScOzy>  2  sy
+[Tesseract][v01 psm13] —
+[Tesseract][v02 psm6] Zerg S fey cra s (s IS meee O=, we,
+[Tesseract][v02 psm11] fac’,  CR2095  [3  Ibe  A
+[Tesseract][v02 psm13] a)
+[Tesseract][v03 psm6] 7. * * on» 5) $cOtuD x . Fy
+[Tesseract][v03 psm11] aX  a  Y  ScOzuD  I:  ,
+[Tesseract][v03 psm13] —
+[Tesseract][v04 psm6] Cc’ - “ry :  C* ena s ‘On Se Ka) sez  i Aad
+[Tesseract][v04 psm11] fae  CR20925  IC  Ibe  Ad
+[Tesseract][v04 psm13] S
+[Tesseract][v05 psm6] $cOztuD 4 . F3 Y
+[Tesseract][v05 psm11] aX  bal  ScOZuD  ®  17
+[Tesseract][v05 psm13] —
+[Tesseract][v06 psm6] - P- a. Y we ‘. 4 "4 se. " Fx pee ECRIGO SEs le fa > grond ae J hat y, P Soe (2) tal e . a «“, : ‘ . re | _ ’ ». . . ; a Te. b ws rp}. - to tS en ery < , , “a es are I Rese awe &
+[Tesseract][v06 psm7] 2
+[Tesseract][v06 psm11] A>.  Zee  ae  2.  ~~,  Oy  le  an X  HOIZETs  Te:  49  a @  ee  a
+[Tesseract][v06 psm13] &
+[Tesseract][v07 psm6] a, "2. > oa coe Se + *&,. a, CPN ~@.*.. . ) AX; VUNysy £2) e eG 2 7 ° rs “a : i % i i 4 ; AIOUDISIL IE SLL LL Lee §: ‘. ASEr.2 ye. . (9) =f) Py, oo < — w rn
+[Tesseract][v07 psm11] a.*  a  Ce,  ra  ah  pad)  x  Le  }  \ oo  >)  ‘wo  yy)  “¢é  Gy  we ¥  aN
+[Tesseract][v07 psm13] =
+[Tesseract][v08 psm6] LEO gs > sce ~ ra ¢ .  O=
+[Tesseract][v08 psm11] ESS  < Cr2025  aid
+[Tesseract][v08 psm13] S
