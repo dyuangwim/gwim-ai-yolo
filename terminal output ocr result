@@ -1,0 +1,37 @@
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/ocr_sanity_probe.py --img /home/pi/ocr_dumps/test.jpg --save-debug
+saved 9 variants into ./_debug_ocr
+>>> Tesseract results
+[TESS][v00 psm6] 26. + > 5) A 2 c Xx ta? 5 < ~ a
+[TESS][v00 psm7] | ‘ >
+[TESS][v00 psm11] 7  > \,  CR2025  at  S.
+[TESS][v00 psm13] )
+[TESS][v01 psm6] A a re ere ry " stozus - “SS 7 pA
+[TESS][v01 psm11] SS :  Lot  —  lJ  St0zu  7
+[TESS][v01 psm13] 2
+[TESS][v02 psm6] - 582038 ‘N | TOKEN, < y wad - N“ al
+[TESS][v02 psm7] | ‘ >
+[TESS][v02 psm11] qk  S \  R2038  &  1st  ON
+[TESS][v02 psm13] e)
+[TESS][v03 psm6] Pe  - ‘ 4 wes NW ' we" ) v sf0zu> - \Ng T 4
+[TESS][v03 psm7] © :
+[TESS][v03 psm11] Ww ‘  al |  st0ze%  i  ,’
+[TESS][v03 psm13] =)
+[TESS][v04 psm6] rah -a > \ Epa ois - ( y wad = ~~. al
+[TESS][v04 psm7] | ‘ >
+[TESS][v04 psm11] qk  S \  CR2038  1a  ON
+[TESS][v04 psm13] s)
+[TESS][v05 psm6] AA NG et an 7 stozu> : \N T
+[TESS][v05 psm11] WN ‘  oad |  >~  lJ”  st0te  ,’
+[TESS][v05 psm13] 2
+[TESS][v06 psm6] pm wy ™~ (Z ¢ an ban me , ie a ANS Soh og GA eS a vor . - L., Se ‘ ae rr oy) -\ | Speers “N\A i — - +f ¥* = ) 7 jes of as ae UL EUPIA: oy —. Jim e 2 | ry ene ir 7 : } ; Ne : wo agit +h see an ged .* Bes ‘Sa : oy oF f 4 C) 0 INS SS ete
+[TESS][v06 psm11] Ve  On ej  qa  ~a™  » “.  Syd  a’  ae  “YN  es  i tal  2  o.!  Me  a  \  + Jf ¥*  fe  od  -\  (7)  le  HB  2 |  0  “h  a a)  pu,  Ly ber  ,o  Jit  vA  Pe  ae  ee ‘  3,  Oa  o\ ON  — ZF ow  <>  Bee ie  fa,
+[TESS][v06 psm13] =
+[TESS][v07 psm6] Te “~ ~~  | RETA T SSN NS  “4 Cc aN, ; “  ge &. oS eae St ae yo ‘ne ah ¢  ES wishes 7 ‘at  Ne oe . | At ° iP e¢ ooray st (le / | >) 8 be * - a La 7 3}, RAO roy i) eS -> f. fot BIA a} Vo RA oe ra te ae Se Ss  "« ~~ a y - . ( a  XN pe 8 , es ; a:  \\M 7 a YN - a we” ad  SO UTP at? ney  Ne . ee Dae eo A . . als aU A eA) ~ . . me o” . ae
+[TESS][v07 psm11] ae ee  -.  Oe  '¢  me Te Ke UA  =.)  a, uN \  2 4  CVF:  7  @i  iy  hf  ‘nt  { /  Pe  i.  at  a /  Y-  ae  vot  Senne  ant  eC)  wt wS  v4  Vc  . od  ef  ~7  a:  ig  J!  \  \,  NY  mE a  to.  vd  Pal  r* >;  wf &  I a  ep)  on. om.
+[TESS][v07 psm13] =
+[TESS][v08 psm6] 7 Sat os ; S CR2025 2\ c ‘ : y 4 J au) ty  Ser
+[TESS][v08 psm11] 7  CR2025 a  a  tae  _,  SS
+[TESS][v08 psm13] )
+
+>>> Paddle results
+[PADDLE] INIT_FAIL: No module named 'paddle'
