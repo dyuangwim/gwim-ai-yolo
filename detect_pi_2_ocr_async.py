@@ -1,16 +1,17 @@
-# detect_pi_2_ocr_async.py — RPi5 YOLO (NCNN) + Async OCR (PaddleOCR→fallback Tesseract)
-# 超级完整/稳态版：
-# - 修正：变量名冲突、摄像头优雅退出（不再 Picamera2().stop() 造成 allocator 异常）、
-#         PaddleOCR 参数兼容（去掉 use_onnx/use_textline_orientation 冲突）、
-#         Ctrl+C 时顺序关停（先停主循环→送毒丸→join worker→停相机）。
-# - 稳帧：每 N 帧调度 + 每批限额K + 置信度锁定；中心收缩ROI；HUD 显示 OCR 统计。
-# - 仅做“型号匹配”（不做版本），匹配=青色，不匹配=红色，未知=白。
+# detect_pi_2_ocr_async.py — RPi5 YOLO (NCNN) + Async OCR
+# 稳态 + 强化版（针对你现场“长时间不出文本”的问题做了硬改）：
+# 1) 强化 Tesseract 预处理：放大→CLAHE→锐化→多种二值化（OTSU/自适应/反相）→0°+180° 双角度，
+#    逐个跑并打分（命中 CRxxxx > 纯数字 > 文本长度），选得分最高的方案。
+# 2) 可选保存每个送 OCR 的 crop（--ocr_dump）以便排错；可在 HUD 下方显示 RAW 文本（--ocr_show_raw）。
+# 3) 调整默认调度：ocr_every=4、ocr_budget=4（方便快速锁定；上线可改回 8/2）。
+# 4) 彻底修复关停顺序（避免 allocator 异常），保留限额+锁定+中心收缩+颜色规则。
 #
-# 运行示例：
-#   python3 detect_pi_2_ocr_async.py \
+# 运行示例（先用 Tesseract 验证流程）：
+#   python3 detect_pi_2_ocr_async_strong.py \
 #     --weights /home/pi/models/best_ncnn_model --imgsz 320 --conf 0.30 \
-#     --expected_model CR2025 --ocr --ocr_every 8 --ocr_budget 2 \
-#     --ocr_lock_conf 0.55 --center_shrink 0.18 --preview
+#     --expected_model CR2025 --ocr --ocr_backend TESSERACT \
+#     --ocr_every 4 --ocr_budget 4 --ocr_lock_conf 0.55 \
+#     --center_shrink 0.12 --ocr_pad 0.18 --ocr_show_raw --ocr_dump --preview
 
 import os, time, argparse, re, signal
 from datetime import datetime
@@ -46,11 +47,11 @@ def parse_args():
     # OCR 调度
     ap.add_argument("--ocr", action="store_true")
     ap.add_argument("--ocr_backend", choices=["AUTO","PADDLE","TESSERACT"], default="AUTO")
-    ap.add_argument("--ocr_every", type=int, default=8)
-    ap.add_argument("--ocr_budget", type=int, default=2)
+    ap.add_argument("--ocr_every", type=int, default=4)      # 强化：默认更频繁
+    ap.add_argument("--ocr_budget", type=int, default=4)     # 强化：默认更大预算
     ap.add_argument("--ocr_lock_conf", type=float, default=0.55)
-    ap.add_argument("--ocr_pad", type=float, default=0.10)
-    ap.add_argument("--center_shrink", type=float, default=0.18, help="中心收缩比例(0~0.4)")
+    ap.add_argument("--ocr_pad", type=float, default=0.18)   # 强化：更大 padding
+    ap.add_argument("--center_shrink", type=float, default=0.12, help="中心收缩比例(0~0.4)")
     ap.add_argument("--ocr_dump", action="store_true")
     ap.add_argument("--ocr_dump_dir", default="/home/pi/ocr_dumps")
 
@@ -77,12 +78,12 @@ def draw_box(img, x1,y1,x2,y2, label, color=(255,255,255)):
     cv2.putText(img,label,(x1+4,y0+th+3),cv2.FONT_HERSHEY_SIMPLEX,0.6,(0,0,0),2)
 
 def draw_small_text(img, x, y, text, color=(200,200,200)):
-    maxw=40
+    maxw=52
     t=text
     while t:
         ln=t[:maxw]
-        cv2.putText(img, ln, (x,y), cv2.FONT_HERSHEY_PLAIN, 1.0, color, 1)
-        y+=12
+        cv2.putText(img, ln, (x,y), cv2.FONT_HERSHEY_PLAIN, 1.2, color, 1)
+        y+=14
         t=t[maxw:]
 
 # ---------- OCR Worker 实现 ----------
@@ -92,12 +93,12 @@ def _unsharp_mask(gray, amount=1.0, radius=3):
     return cv2.addWeighted(gray, 1+amount, blur, -amount, 0)
 
 
-def prep_roi_for_ocr(bgr, max_w=320, gamma=1.1):
-    if bgr is None or bgr.size==0: return None, None, None, None
+def _prep_basic(bgr, target_w=480, gamma=1.10):
+    if bgr is None or bgr.size==0: return None
     h,w=bgr.shape[:2]
-    if w>max_w:
-        s=max_w/float(w)
-        bgr=cv2.resize(bgr,(int(w*s),int(h*s)),interpolation=cv2.INTER_LINEAR)
+    if w<target_w:
+        s=target_w/float(w)
+        bgr=cv2.resize(bgr,(int(w*s),int(h*s)),interpolation=cv2.INTER_CUBIC)
     if gamma!=1.0:
         table=np.array([((i/255.0)**(1.0/gamma))*255 for i in np.arange(256)]).astype("uint8")
         bgr=cv2.LUT(bgr, table)
@@ -105,10 +106,49 @@ def prep_roi_for_ocr(bgr, max_w=320, gamma=1.1):
     clahe=cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     gray=clahe.apply(gray)
     gray=_unsharp_mask(gray, amount=1.0, radius=3)
-    gray=cv2.GaussianBlur(gray,(3,3),0)
-    rgb0=cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
-    rgb180=cv2.rotate(rgb0, cv2.ROTATE_180)
-    return rgb0, rgb180, bgr, gray
+    return gray
+
+
+def _binarize_family(gray):
+    outs=[]
+    _,t1=cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU);   outs.append(t1)
+    _,t2=cv2.threshold(gray,0,255,cv2.THRESH_BINARY_INV+cv2.THRESH_OTSU); outs.append(t2)
+    t3=cv2.adaptiveThreshold(gray,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY,31,8); outs.append(t3)
+    t4=cv2.adaptiveThreshold(gray,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,31,8); outs.append(t4)
+    k=cv2.getStructuringElement(cv2.MORPH_RECT,(2,2))
+    outs+=[cv2.morphologyEx(x, cv2.MORPH_OPEN, k) for x in outs]
+    return outs
+
+
+def _run_tess(img_bin):
+    import pytesseract
+    cfg='--psm 6 -c tessedit_char_whitelist=C0123456789R.'
+    d=pytesseract.image_to_data(img_bin, output_type=pytesseract.Output.DICT, config=cfg)
+    texts=[w for w in d.get('text',[]) if str(w).strip()]
+    confs=[float(c) for c in d.get('conf',[]) if str(c).lstrip('-').isdigit()]
+    raw=' '.join(texts).upper() if texts else ''
+    avg=float(sum(confs)/len(confs)) if confs else 0.0
+    return raw, avg
+
+
+def tesseract_ocr_once_strong(bgr_img):
+    gray=_prep_basic(bgr_img)
+    if gray is None: return True, '', '', 0.0
+    bins=_binarize_family(gray)
+    bins+= [cv2.rotate(x, cv2.ROTATE_180) for x in list(bins)]
+    best=(None, -1e9, 0.0)
+    for b in bins:
+        raw, avg=_run_tess(b)
+        score=0.0
+        if RE_CR.search(raw): score+=100.0
+        elif RE_DIGITS.search(raw): score+=60.0
+        score+=min(len(raw),40)*0.5
+        score+=avg*0.1
+        if score>best[1]: best=(raw, score, avg)
+    raw=best[0] or ''
+    m=RE_CR.search(raw) or RE_DIGITS.search(raw)
+    model_out=norm_model(m.group(0) if m else raw)
+    return True, model_out, raw, best[2]
 
 
 def _call_paddle_ocr(ocr, rgb_img):
@@ -118,14 +158,12 @@ def _call_paddle_ocr(ocr, rgb_img):
 def _parse_ocr_result(res):
     texts, probs=[], []
     if res is None: return texts, probs
-    if isinstance(res, list) and len(res)==1 and isinstance(res[0], list):
-        res=res[0]
+    if isinstance(res, list) and len(res)==1 and isinstance(res[0], list): res=res[0]
     if isinstance(res, list) and len(res)>0 and isinstance(res[0], dict):
         for item in res:
-            txt=item.get('text') or item.get('transcription') or item.get('label') or ""
+            txt=item.get('text') or item.get('transcription') or item.get('label') or ''
             sc =item.get('score') or item.get('confidence') or item.get('prob') or 0.0
-            if txt:
-                texts.append(str(txt).strip()); probs.append(float(sc) if sc else 0.0)
+            if txt: texts.append(str(txt).strip()); probs.append(float(sc) if sc else 0.0)
         return texts, probs
     if isinstance(res, list):
         for it in res:
@@ -136,94 +174,56 @@ def _parse_ocr_result(res):
     return texts, probs
 
 
-def paddle_ocr_once(ocr, rgb_img, debug_once=False, printed=[False]):
-    res=_call_paddle_ocr(ocr, rgb_img)
-    texts, probs=_parse_ocr_result(res)
-    if (not texts) and debug_once and (not printed[0]):
-        printed[0]=True
-        try: print("DEBUG OCR raw result (truncated):", str(res)[:400])
-        except Exception: print("DEBUG OCR raw result: <unprintable>")
-    if not texts:
-        return True, "", "", 0.0
-    raw=" ".join(texts).upper()
-    best_model=""; best_prob=0.0
-    for t,p in zip(texts, probs if probs else [0.0]*len(texts)):
-        m=RE_CR.search(t) or RE_DIGITS.search(t)
-        if m and float(p)>best_prob:
-            best_model=t; best_prob=float(p)
-    model_out=norm_model(best_model if best_model else raw)
-    conf=float(best_prob if model_out else (max(probs) if probs else 0.0))
-    return True, model_out, raw, conf
-
-
-def tesseract_ocr_once(bgr_img):
-    try:
-        import pytesseract
-    except Exception:
-        return True, "", "", 0.0
-    gray=cv2.cvtColor(bgr_img, cv2.COLOR_BGR2GRAY)
-    _,bin_img=cv2.threshold(gray,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    d=pytesseract.image_to_data(bin_img, output_type=pytesseract.Output.DICT,
-                                config='--psm 6 -c tessedit_char_whitelist=C0123456789R.')
-    texts=[w for w in d.get("text",[]) if w.strip()]
-    confs=[float(c) for c in d.get("conf",[]) if str(c).isdigit() or (isinstance(c,(int,float)) and float(c)>=0)]
-    if not texts:
-        return True, "", "", 0.0
-    raw=" ".join(texts).upper()
+def paddle_ocr_once(ocr, bgr_img):
+    gray=_prep_basic(bgr_img, target_w=480)
+    rgb0=cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
+    rgb180=cv2.rotate(rgb0, cv2.ROTATE_180)
+    res0=_call_paddle_ocr(ocr, rgb0);  t0,p0=_parse_ocr_result(res0); raw0=' '.join(t0).upper(); sc0=max(p0) if p0 else 0.0
+    res1=_call_paddle_ocr(ocr, rgb180);t1,p1=_parse_ocr_result(res1);raw1=' '.join(t1).upper(); sc1=max(p1) if p1 else 0.0
+    if sc1>sc0: raw=raw1; conf=sc1
+    else:       raw=raw0; conf=sc0
     m=RE_CR.search(raw) or RE_DIGITS.search(raw)
-    model_out=norm_model(m.group(0) if m else raw)
-    conf=float(sum(confs)/len(confs)) if confs else 0.0
-    return True, model_out, raw, conf
+    return True, norm_model(m.group(0) if m else raw), raw, conf
 
 
-def ocr_worker(input_q: mp.Queue, output_q: mp.Queue, backend: str, debug_once: bool=False):
-    ocr=None; backend_used="OFF"
-    if backend.upper() in ("AUTO","PADDLE"):
+def ocr_worker(input_q: mp.Queue, output_q: mp.Queue, backend: str):
+    ocr=None; backend_used='TESSERACT'
+    if backend.upper() in ('AUTO','PADDLE'):
         try:
             from paddleocr import PaddleOCR
             ocr=PaddleOCR(lang='en', use_angle_cls=False)
-            backend_used="PADDLE"; print("[OCR-Worker] PaddleOCR init OK")
+            backend_used='PADDLE'; print('[OCR-Worker] PaddleOCR init OK')
         except Exception as e:
-            print("[OCR-Worker] Paddle init failed, fallback to Tesseract:", e)
-            backend_used="TESSERACT"
-    else:
-        backend_used="TESSERACT"
+            print('[OCR-Worker] Paddle init failed, fallback to Tesseract:', e)
+            backend_used='TESSERACT'
 
     while True:
         try:
             task=input_q.get(timeout=0.2)
         except queue.Empty:
             continue
-        if task is None:
-            break
+        if task is None: break
         crop=task['crop']
         t0=time.time()
         try:
-            if backend_used=="PADDLE" and ocr is not None:
-                rgb0, rgb180, _, _ = prep_roi_for_ocr(crop, max_w=320, gamma=1.1)
-                if rgb0 is None:
-                    model_out, raw, prob = "", "", 0.0
-                else:
-                    _, m0, raw0, p0 = paddle_ocr_once(ocr, rgb0, debug_once=debug_once)
-                    _, m1, raw1, p1 = paddle_ocr_once(ocr, rgb180, debug_once=False)
-                    if p1>p0: model_out, raw, prob = m1, raw1, p1
-                    else:     model_out, raw, prob = m0, raw0, p0
+            if backend_used=='PADDLE' and ocr is not None:
+                _, model_out, raw, prob = paddle_ocr_once(ocr, crop)
             else:
-                _, model_out, raw, prob = tesseract_ocr_once(crop)
+                _, model_out, raw, prob = tesseract_ocr_once_strong(crop)
         except Exception as e:
-            model_out, raw, prob = "", f"ERR:{e}", 0.0
+            model_out, raw, prob = '', f'ERR:{e}', 0.0
         ms=(time.time()-t0)*1000.0
-        output_q.put({'tid': task['tid'], 'ran': True, 'model': model_out, 'raw': raw, 'prob': float(prob), 'ms': ms})
+        output_q.put({'tid': task['tid'], 'model': model_out, 'raw': raw, 'prob': float(prob), 'ms': ms})
 
 # ---------- 主程序 ----------
 
 def main():
     args=parse_args()
 
-    os.environ["OMP_NUM_THREADS"]=str(args.threads)
-    os.environ["NCNN_THREADS"]=str(args.threads)
-    os.environ.setdefault("OPENBLAS_NUM_THREADS","1")
-    os.environ.setdefault("NCNN_VERBOSE","0")
+    os.environ['OMP_NUM_THREADS']=str(args.threads)
+    os.environ['NCNN_THREADS']=str(args.threads)
+    os.environ.setdefault('OPENBLAS_NUM_THREADS','1')
+    os.environ.setdefault('NCNN_VERBOSE','0')
 
     ensure_dir(args.save_dir)
     if args.ocr_dump: ensure_dir(args.ocr_dump_dir)
@@ -233,23 +233,23 @@ def main():
     picam2=Picamera2()
     main_w, main_h=1280, 960
     cfg=(picam2.create_preview_configuration if args.preview else picam2.create_video_configuration)(
-        main={"size":(main_w,main_h),"format":"YUV420"}, controls={"FrameRate":30})
+        main={'size':(main_w,main_h),'format':'YUV420'}, controls={'FrameRate':30})
     picam2.configure(cfg); picam2.start(); time.sleep(1.0)
 
-    print("Loading YOLO…")
+    print('Loading YOLO…')
     yolo=YOLO(args.weights)
     _=yolo.predict(source=np.zeros((args.imgsz,args.imgsz,3),np.uint8), imgsz=args.imgsz, verbose=False)
-    print("✅ YOLO ready.")
+    print('✅ YOLO ready.')
 
-    input_q=mp.Queue(maxsize=32)
+    input_q=mp.Queue(maxsize=64)
     output_q=mp.Queue(maxsize=64)
-    backend = ("PADDLE" if args.ocr_backend=="PADDLE" else ("TESSERACT" if args.ocr_backend=="TESSERACT" else "AUTO"))
+    backend = ('PADDLE' if args.ocr_backend=='PADDLE' else ('TESSERACT' if args.ocr_backend=='TESSERACT' else 'AUTO'))
     worker=None
     if args.ocr:
-        worker=mp.Process(target=ocr_worker, args=(input_q,output_q,backend,args.debug_ocr_once), daemon=True)
-        worker.start(); print(f"✅ OCR Worker started. backend={backend}")
+        worker=mp.Process(target=ocr_worker, args=(input_q,output_q,backend), daemon=True)
+        worker.start(); print(f'✅ OCR Worker started. backend={backend}')
     else:
-        print("ℹ️ OCR disabled (no --ocr)")
+        print('ℹ️ OCR disabled (no --ocr)')
 
     tracks={}
     sx, sy=main_w/float(args.imgsz), main_h/float(args.imgsz)
@@ -258,15 +258,14 @@ def main():
     total_ocr_ms=0.0; ocr_runs=0; ocr_calls_total=0
 
     stop_flag=[False]
-    def handle_sigint(sig,frame):
-        stop_flag[0]=True
+    def handle_sigint(sig,frame): stop_flag[0]=True
     signal.signal(signal.SIGINT, handle_sigint)
 
     try:
         while not stop_flag[0]:
             t0=time.time()
             try:
-                yuv=picam2.capture_array("main")
+                yuv=picam2.capture_array('main')
             except Exception:
                 continue
             frame=yuv if args.assume_bgr else cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)
@@ -290,9 +289,9 @@ def main():
                     if conf<(args.conf+0.10): low=True
 
                     tid=int(b.id[0]); ids.add(tid)
-                    info=tracks.get(tid, {"model":"", "conf":0.0, "locked":False, "raw":"", "tried":False})
+                    info=tracks.get(tid, {'model':'', 'conf':0.0, 'locked':False, 'raw':'', 'tried':False})
 
-                    if do_ocr and (not info["locked"]) and budget>0 and args.ocr:
+                    if do_ocr and (not info['locked']) and budget>0 and args.ocr:
                         pad=args.ocr_pad; w,h=X2-X1, Y2-Y1
                         px,py=int(w*pad),int(h*pad)
                         ox1,oy1=max(0,X1-px), max(0,Y1-py)
@@ -305,25 +304,27 @@ def main():
                         if cx2>cx1 and cy2>cy1:
                             crop=frame[cy1:cy2, cx1:cx2]
                         if crop is not None and crop.size>0:
+                            if args.ocr_dump:
+                                fn=f"{tid}_{int(time.time()*1000)}.jpg"; cv2.imwrite(os.path.join(args.ocr_dump_dir, fn), crop)
                             try:
                                 input_q.put_nowait({'tid': tid, 'crop': crop, 'ts': time.time()})
                                 ocr_calls_total += 1
-                                info["tried"]=True
+                                info['tried']=True
                                 budget-=1
                             except queue.Full:
                                 pass
 
-                    label_model = info["model"] if info["model"] else "?"
+                    label_model = info['model'] if info['model'] else '?'
                     color=(255,255,255)
                     if expected_model:
-                        if info["model"] == expected_model: color=(255,255,0)
-                        elif info["model"]: color=(0,0,255)
+                        if info['model'] == expected_model: color=(255,255,0)
+                        elif info['model']: color=(0,0,255)
                     label=f"{label_model} | {conf:.2f}"
                     draw_box(frame, X1,Y1,X2,Y2, label, color)
                     if args.ocr_show_raw:
-                        raw_short = info.get("raw","")
-                        if len(raw_short)>42: raw_short=raw_short[:42]+"…"
-                        draw_small_text(frame, X1+4, Y2+14, "RAW: "+(raw_short if raw_short else "[NO-OCR]"))
+                        raw_short = info.get('raw','')
+                        if len(raw_short)>80: raw_short=raw_short[:80]+'…'
+                        draw_small_text(frame, X1+4, Y2+16, 'RAW: '+(raw_short if raw_short else '[NO-OCR]'))
 
                     tracks[tid]=info
 
@@ -336,8 +337,8 @@ def main():
                     tid=res['tid']
                     info=tracks.get(tid)
                     if info is None: continue
-                    ocr_text=res.get('model') or ""
-                    raw=res.get('raw') or ""
+                    ocr_text=res.get('model') or ''
+                    raw=res.get('raw') or ''
                     prob=float(res.get('prob') or 0.0)
                     info['raw']=raw if raw else info.get('raw','')
                     if ocr_text and (prob>info['conf'] or not info['model']):
@@ -368,7 +369,7 @@ def main():
             cv2.putText(frame, hud, (10,28), cv2.FONT_HERSHEY_SIMPLEX,0.6,(0,255,255),2)
 
             if not args.headless:
-                cv2.imshow("Battery+AsyncOCR", frame)
+                cv2.imshow('Battery+AsyncOCR', frame)
                 if cv2.waitKey(1)&0xFF==27: break
 
             now=time.time()
@@ -395,7 +396,7 @@ def main():
         print(f"\nFrames:{frame_idx} | Time:{el:.1f}s | FPS:{frame_idx/max(el,1):.1f}")
         if args.ocr and ocr_runs:
             print(f"OCR runs:{ocr_runs} | Avg OCR:{total_ocr_ms/max(ocr_runs,1):.1f} ms")
-        print("Bye.")
+        print('Bye.')
 
-if __name__=="__main__":
+if __name__=='__main__':
     main()
