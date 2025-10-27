@@ -108,4 +108,96 @@ def main():
 
                         shrink=max(0.0, min(0.4, args.center_shrink))
                         if shrink>0.0:
-                            cw,ch=
+                            cw,ch=ox2-ox1, oy2-oy1
+                            cx1=ox1+int(cw*shrink); cy1=oy1+int(ch*shrink)
+                            cx2=ox2-int(cw*shrink); cy2=oy2-int(ch*shrink)
+                            if cx2>cx1 and cy2>cy1:
+                                crop=frame[cy1:cy2, cx1:cx2]
+
+                        if crop is not None and crop.size>0:
+                            try:
+                                input_q.put_nowait({"tid":tid, "crop":crop, "expected":expected})
+                                calls+=1; budget-=1
+                                info["silent"]=6   # 接下来 6 帧不再送，避免重复
+                            except Exception:
+                                pass
+
+                # 颜色 & 文本（锁定且与 expected 不符→红）
+                model = info["model"] if info["model"] else "?"
+                if expected and info["locked"] and info["model"]:
+                    color=(255,255,0) if info["model"]==expected else (0,0,255)
+                else:
+                    color=(255,255,255)
+                label=f"{model} | {info.get('conf',0.0):.2f}"
+                draw_box(frame, X1,Y1,X2,Y2, label, color)
+                tracks[tid]=info
+
+            # 取回 OCR 结果
+            if args.ocr:
+                import queue
+                while True:
+                    try:
+                        res = output_q.get_nowait()
+                    except queue.Empty:
+                        break
+                    tid=res["tid"]; info=tracks.get(tid)
+                    if info is None: continue
+                    model=res.get("model","")
+                    prob=float(res.get("prob",0.0))
+                    raw=res.get("raw","")
+                    if raw: info["raw"]=raw
+                    changed=False
+                    if model and (prob>info["conf"] or not info["model"]):
+                        info["model"]=model; info["conf"]=prob; changed=True
+                    if changed and prob>=args.ocr_lock_conf:
+                        info["locked"]=True
+                        info["silent"]=12  # 锁定后更长静默
+                    tracks[tid]=info
+                    total_ocr_ms+=float(res.get("ms",0.0)); ocr_runs+=1
+
+            # 清理离场
+            for tid in [t for t in list(tracks.keys()) if t not in ids]:
+                tracks.pop(tid, None)
+
+            # HUD/FPS
+            frame_idx+=1
+            dt=(time.time()-t0)*1000.0
+            fps=(1000.0/max(dt,1.0)); fps_hist.append(fps)
+            if len(fps_hist)>30: fps_hist.pop(0)
+            fps_avg=sum(fps_hist)/len(fps_hist)
+            hud=f"Det:{det_count} | {dt:.1f}ms | {fps_avg:.1f}FPS | OCR:{'ON' if args.ocr else 'OFF'}"
+            if args.ocr:
+                hud+=f" calls:{calls}"
+                if ocr_runs: hud+=f" avg:{(total_ocr_ms/max(ocr_runs,1)):.1f}ms"
+            if expected:
+                hud+=f" | EXPECT:{expected}"
+            cv2.putText(frame, hud, (10,28), cv2.FONT_HERSHEY_SIMPLEX,0.6,(0,255,255),2)
+
+            if not args.headless:
+                cv2.imshow("Async YOLO + OCR", frame)
+                if cv2.waitKey(1)&0xFF==27: break
+
+            now=time.time()
+            if (det_count==0 or low) and (now-last_save>1.0):
+                fn=f"hard_{det_count}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
+                cv2.imwrite(os.path.join(args.save_dir, fn), frame); last_save=now
+
+    finally:
+        det.close()
+        if args.ocr and worker is not None and worker.is_alive():
+            try:
+                input_q.put(None); worker.join(timeout=1.0)
+            except Exception:
+                try: worker.terminate()
+                except Exception: pass
+        if not args.headless:
+            try: cv2.destroyAllWindows()
+            except Exception: pass
+        el=time.time()-start
+        print(f"\nFrames:{frame_idx} | Time:{el:.1f}s | FPS:{frame_idx/max(el,1):.1f}")
+        if args.ocr and ocr_runs:
+            print(f"OCR runs:{ocr_runs} | Avg OCR:{total_ocr_ms/max(ocr_runs,1):.1f} ms")
+        print("Bye.")
+
+if __name__ == "__main__":
+    main()
