@@ -34,6 +34,7 @@ class YoloDetector:
 
     def capture_bgr(self):
         yuv = self.picam2.capture_array("main")
+        # 兼容 I420/NV12 两种 YUV420
         try:
             return cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)
         except Exception:
