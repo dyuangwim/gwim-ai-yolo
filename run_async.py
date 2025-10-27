@@ -27,11 +27,11 @@ def parse_args():
 
     # OCR 调度参数
     ap.add_argument("--ocr", action="store_true")
-    ap.add_argument("--ocr_every", type=int, default=8)
-    ap.add_argument("--ocr_budget", type=int, default=3)
-    ap.add_argument("--ocr_lock_conf", type=float, default=0.55)
-    ap.add_argument("--ocr_pad", type=float, default=0.15)
-    ap.add_argument("--center_shrink", type=float, default=0.18)
+    ap.add_argument("--ocr_every", type=int, default=6)       # 稍微勤一点
+    ap.add_argument("--ocr_budget", type=int, default=4)      # 多给 1 个预算
+    ap.add_argument("--ocr_lock_conf", type=float, default=0.60)
+    ap.add_argument("--ocr_pad", type=float, default=0.22)
+    ap.add_argument("--center_shrink", type=float, default=0.0)
 
     ap.add_argument("--expected_model", default="", help="如 CR2025，用于着色")
     ap.add_argument("--save_dir", default="/home/pi/hard_cases")
@@ -77,7 +77,7 @@ def main():
 
                 info = tracks.get(tid, {"model":"", "conf":0.0, "locked":False, "raw":""})
 
-                # 调度 OCR：中心收缩 + padding
+                # 调度 OCR：padding + （可选）中心收缩
                 if do_ocr and (not info["locked"]) and budget>0 and args.ocr:
                     pad=args.ocr_pad; w,h=X2-X1, Y2-Y1
                     px,py=int(w*pad),int(h*pad)
@@ -86,24 +86,27 @@ def main():
                     crop=frame[oy1:oy2, ox1:ox2]
 
                     shrink=max(0.0, min(0.4, args.center_shrink))
-                    cw,ch=ox2-ox1, oy2-oy1
-                    cx1=ox1+int(cw*shrink); cy1=oy1+int(ch*shrink)
-                    cx2=ox2-int(cw*shrink); cy2=oy2-int(ch*shrink)
-                    if cx2>cx1 and cy2>cy1: crop=frame[cy1:cy2, cx1:cx2]
+                    if shrink>0.0:
+                        cw,ch=ox2-ox1, oy2-oy1
+                        cx1=ox1+int(cw*shrink); cy1=oy1+int(ch*shrink)
+                        cx2=ox2-int(cw*shrink); cy2=oy2-int(ch*shrink)
+                        if cx2>cx1 and cy2>cy1:
+                            crop=frame[cy1:cy2, cx1:cx2]
 
                     if crop is not None and crop.size>0:
                         try:
-                            input_q.put_nowait({"tid":tid, "crop":crop})
+                            input_q.put_nowait({"tid":tid, "crop":crop, "expected":expected})
                             calls+=1; budget-=1
                         except Exception:
                             pass
 
-                # 颜色 & 文本
+                # 颜色 & 文本（只有“已锁定且与 expected 不符”才红色）
                 model = info["model"] if info["model"] else "?"
-                color=(255,255,255)
-                if expected:
-                    if info["model"] and info["model"]==expected: color=(255,255,0)  # 青
-                    elif info["model"]: color=(0,0,255)  # 红
+                if expected and info["locked"] and info["model"]:
+                    if info["model"] == expected: color=(255,255,0)   # 青/黄：匹配
+                    else:                          color=(0,0,255)     # 红：锁定但不匹配
+                else:
+                    color=(255,255,255)  # 未锁定或无 expected：白
                 label=f"{model} | {conf:.2f}"
                 draw_box(frame, X1,Y1,X2,Y2, label, color)
                 tracks[tid]=info
@@ -119,12 +122,14 @@ def main():
                     tid=res["tid"]; info=tracks.get(tid)
                     if info is None: continue
                     model=res.get("model","")
-                    prob=float(res.get("prob",0.0))
+                    prob=float(res.get("prob",0.0))   # 现在是“纯 OCR 置信度”
                     raw=res.get("raw","")
                     info["raw"]=raw if raw else info.get("raw","")
                     if model and (prob>info["conf"] or not info["model"]):
                         info["model"]=model; info["conf"]=prob
-                        if prob>=args.ocr_lock_conf: info["locked"]=True
+                        # 只有命中 OCR 且置信度过阈值才锁定
+                        if prob>=args.ocr_lock_conf:
+                            info["locked"]=True
                     tracks[tid]=info
                     total_ocr_ms+=float(res.get("ms",0.0)); ocr_runs+=1
 
@@ -171,6 +176,6 @@ def main():
         if args.ocr and ocr_runs:
             print(f"OCR runs:{ocr_runs} | Avg OCR:{total_ocr_ms/max(ocr_runs,1):.1f} ms")
         print("Bye.")
-        
+
 if __name__ == "__main__":
     main()
