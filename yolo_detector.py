@@ -23,9 +23,8 @@ class YoloDetector:
         self.picam2.start()
         time.sleep(1.0)
 
-        # YOLO
+        # YOLO (NCNN 文件夹)
         self.model = YOLO(weights)
-        # warmup
         _ = self.model.predict(source=np.zeros((self.imgsz, self.imgsz, 3), np.uint8),
                                imgsz=self.imgsz, verbose=False)
 
@@ -34,7 +33,6 @@ class YoloDetector:
 
     def capture_bgr(self):
         yuv = self.picam2.capture_array("main")
-        # 兼容 I420/NV12 两种 YUV420
         try:
             return cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)
         except Exception:
@@ -50,7 +48,6 @@ class YoloDetector:
             for i in order:
                 b = r.boxes[int(i)]
                 x1, y1, x2, y2 = map(int, b.xyxy[0].tolist())
-                # scale back to camera coords
                 X1, Y1, X2, Y2 = int(x1*self.sx), int(y1*self.sy), int(x2*self.sx), int(y2*self.sy)
                 dets.append({
                     "xyxy": (X1, Y1, X2, Y2),
