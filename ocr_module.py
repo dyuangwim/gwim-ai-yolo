@@ -1,10 +1,11 @@
 # ocr_module.py
 import re, cv2, numpy as np
+from typing import List, Tuple, Optional
 
-# 允许的型号（你可按需增减）
-ALLOWED = {"CR1616","CR1650","CR2016","CR2025","CR2032"}
+# 允许的型号（修正：加入 CR1620，移除误写 CR1650）
+ALLOWED = {"CR1616","CR1620","CR2016","CR2025","CR2032"}
 
-# —— 预处理（和你调通的逻辑一致：放大、遮罩、去高光、CLAHE、阈值、180°）——
+# —— 预处理 —— #
 def _center_circle_mask(img, ratio=0.92):
     h,w = img.shape[:2]
     r = int(min(h,w)*ratio/2)
@@ -52,34 +53,50 @@ def make_variants(bgr):
     outs.append(cv2.cvtColor(strong, cv2.COLOR_GRAY2RGB))
     return outs
 
-# —— 文本清洗 + 型号提取 —— 
-RE_CR_RAW = re.compile(r"([CDGOQ]?R)\s*([0O]\s*\d\s*\d\s*\d|\d\s*\d\s*\d\s*\d)", re.I)
+# —— 文本清洗 + 型号提取 —— #
+RE_CR_RAW = re.compile(r"([CDQO]?R)\s*([0O]\s*\d\s*\d\s*\d|\d\s*\d\s*\d\s*\d)", re.I)
 
 def _normalize_text(t:str)->str:
-    s=t.upper()
+    s = t.upper()
+    # 只保留高频且相对安全的替换
     s = re.sub(r"\b[DGQO]R","CR",s)  # DR/GR/QR/OR -> CR
-    s = (s.replace("O","0").replace("S","5").replace("Z","2")
-           .replace("B","8").replace("G","6").replace("I","1").replace("L","1"))
+    s = (s.replace("O","0")
+           .replace("S","5")
+           .replace("Z","2")
+           .replace("B","8"))
+    # 注意：不再做 G->6 / I->1 / L->1 的全局替换，避免把杂音扭成“6120”
     return re.sub(r"\s+"," ",s).strip()
 
-def extract_models(txt:str):
+def extract_models(txt:str)->List[str]:
     txt=_normalize_text(txt)
     cand=set()
-    for m in re.finditer(r"CR\s*(\d{4})", txt): cand.add("CR"+m.group(1))
+    for m in re.finditer(r"CR\s*(\d{4})", txt):
+        cand.add("CR"+m.group(1))
     if not cand:
         for m in RE_CR_RAW.finditer(txt):
             digits=re.sub(r"\s+","",m.group(2))
-            if len(digits)==4 and digits.isdigit(): cand.add("CR"+digits)
-    allowed=[c for c in cand if c in ALLOWED]
-    return allowed or list(cand)
+            if len(digits)==4 and digits.isdigit():
+                cand.add("CR"+digits)
+    # 按白名单优先排序
+    ordered = sorted(cand, key=lambda x: (x not in ALLOWED, x))
+    return ordered
 
-# —— OCR 实现（RapidOCR 优先，Tesseract 备选）——
-def rapidocr_read(imgs):
-    try:
-        from rapidocr_onnxruntime import RapidOCR
-    except Exception:
+# —— OCR 实现（RapidOCR 优先，Tesseract 备选，单例复用）—— #
+_RAPID = None
+def _get_rapid():
+    global _RAPID
+    if _RAPID is None:
+        try:
+            from rapidocr_onnxruntime import RapidOCR
+            _RAPID = RapidOCR()  # 只初始化一次
+        except Exception:
+            _RAPID = False
+    return _RAPID
+
+def rapidocr_read(imgs)->List[Tuple[str,float,str]]:
+    ocr = _get_rapid()
+    if not ocr:
         return []
-    ocr=RapidOCR()
     outs=[]
     for i,im in enumerate(imgs):
         try:
@@ -96,7 +113,7 @@ def rapidocr_read(imgs):
             pass
     return outs
 
-def tesseract_read(imgs):
+def tesseract_read(imgs)->List[Tuple[str,float,str]]:
     try:
         import pytesseract
     except Exception:
@@ -104,41 +121,60 @@ def tesseract_read(imgs):
     outs=[]
     for i,im in enumerate(imgs):
         gray=cv2.cvtColor(im, cv2.COLOR_RGB2GRAY)
+        best_txt=""; any_added=False
         for psm in (6,7,11,13):
             try:
                 txt=pytesseract.image_to_string(gray, config=f"--oem 3 --psm {psm}")
                 txt=txt.replace("\n"," ").strip()
-                if txt: outs.append((txt, 0.0, f"v{i:02d}-psm{psm}"))
+                if txt:
+                    best_txt = best_txt+" "+txt if best_txt else txt
+                    any_added=True
             except Exception:
                 pass
+        if any_added:
+            outs.append((best_txt, 0.30, f"v{i:02d}-tess"))  # 给个保守置信度
     return outs
 
-def choose_best(results):
-    # 选择：命中白名单数量多者优先；再看置信度
+def choose_best(results, expected: Optional[str]=None):
+    """
+    返回： (model_join, models_list, best_conf)
+    排序策略：
+      1) 是否出现白名单型号（越多越好）
+      2) 是否包含 expected（若传入则加权）
+      3) OCR 本身置信度（越大越好）
+    """
     best = ("", [], -1.0)
     for txt, conf, _ in results:
         models = extract_models(txt)
-        score = (len([m for m in models if m in ALLOWED]) * 2.0) + conf
+        if not models:
+            score = 0.0 + conf
+        else:
+            whitelist_hits = len([m for m in models if m in ALLOWED])
+            bonus = 0.0
+            if expected and expected in models:
+                bonus += 0.5  # 适度加权 expected
+            score = whitelist_hits * 1.0 + bonus + conf
         if score > best[2]:
-            best = (" ".join(models) if models else "", models, score)
-    return best  # (model_join, models_list, score)
+            best = (" ".join(models) if models else "", models, conf)
+    return best  # 注意：第三个返回值是“OCR 原始置信度”，用于锁定阈值判定
 
-# —— Worker 入口（供 main 异步进程使用）——
+# —— Worker 入口 —— #
 def ocr_worker(input_q, output_q):
     import time, queue
+    _ = _get_rapid()  # 先尝试初始化一次（可用就复用）
     while True:
         try:
             task = input_q.get(timeout=0.2)
         except queue.Empty:
             continue
         if task is None: break
-        tid = task["tid"]; crop = task["crop"]
+        tid = task["tid"]; crop = task["crop"]; expected = task.get("expected","")
         t0 = time.time()
         variants = make_variants(crop)
         results = rapidocr_read(variants) or tesseract_read(variants)
-        model_join, models, score = choose_best(results)
+        model_join, models, best_conf = choose_best(results, expected=expected)
         ms = (time.time()-t0)*1000.0
-        # 返回第一个型号（如果有多个就按出现顺序取第一个）
+        # 返回第一个型号（若多个就取排序后的第一个）
         model = models[0] if models else ""
         raw = model_join if model_join else ""
-        output_q.put({"tid":tid, "model":model, "raw":raw, "prob":score, "ms":ms})
+        output_q.put({"tid":tid, "model":model, "raw":raw, "prob":float(best_conf), "ms":ms})
