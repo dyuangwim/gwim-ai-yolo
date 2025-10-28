@@ -1,4 +1,5 @@
-import os, time, argparse, uuid
+# run_async.py
+import os, time, argparse, uuid, signal, sys
 import cv2, numpy as np
 import multiprocessing as mp
 from datetime import datetime
@@ -29,23 +30,49 @@ def parse_args():
     ap.add_argument("--ocr_every", type=int, default=2)
     ap.add_argument("--ocr_budget", type=int, default=-1)      # -1 自适应
     ap.add_argument("--ocr_lock_conf", type=float, default=0.50)
-    ap.add_argument("--ocr_pad", type=float, default=0.10)     # 略再小一点
+    ap.add_argument("--ocr_pad", type=float, default=0.10)
     ap.add_argument("--center_shrink", type=float, default=0.20)
 
     # 诊断与存盘
-    ap.add_argument("--roi_dir", default="", help="保存原始 OCR ROI 的目录（空=不保存）")
-    ap.add_argument("--pre_dir", default="", help="保存预处理变体图的目录（空=不保存）")
-    ap.add_argument("--dump_rate", type=int, default=0, help="同一目标每 N 帧最多保存一次（0=不保存）")
-    ap.add_argument("--max_dump_per_frame", type=int, default=8, help="每帧最多保存几张，防止 IO 爆")
+    ap.add_argument("--roi_dir", default="")
+    ap.add_argument("--pre_dir", default="")
+    ap.add_argument("--dump_rate", type=int, default=0)
+    ap.add_argument("--max_dump_per_frame", type=int, default=8)
 
-    # 速度相关
-    ap.add_argument("--no_tess", action="store_true", help="关闭 Tesseract 回退，仅用 RapidOCR")
-    ap.add_argument("--max_vars", type=int, default=4, help="预处理变体上限（2~5）")
+    # 速度/稳定
+    ap.add_argument("--no_tess", action="store_true")
+    ap.add_argument("--max_vars", type=int, default=4)
+
+    # 质量门阈值
+    ap.add_argument("--blur_thr", type=float, default=45.0, help="拉普拉斯方差阈值，低于此视为模糊")
+    ap.add_argument("--glare_thr", type=float, default=0.24, help="高光像素比例阈值")
 
     ap.add_argument("--expected_model", default="")
     ap.add_argument("--save_dir", default="/home/pi/hard_cases")
     ap.add_argument("--threads", type=int, default=4)
     return ap.parse_args()
+
+def roi_quality_ok(bgr, blur_thr=45.0, glare_thr=0.24):
+    """快速判断 ROI 是否值得送 OCR：足够清晰、反光不过多。"""
+    if bgr is None or bgr.size==0: return False
+    gray=cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    # 模糊度：拉普拉斯方差
+    blur = cv2.Laplacian(gray, cv2.CV_64F).var()
+    if blur < blur_thr: 
+        return False
+    # 高光占比：亮度>230 的比例
+    glare_ratio = float((gray>230).sum()) / float(gray.size)
+    if glare_ratio > glare_thr:
+        return False
+    return True
+
+def tiny_fingerprint(bgr):
+    """16x16 灰度均值二值化指纹，返回 bytes；用于判断 ROI 是否变化明显。"""
+    if bgr is None or bgr.size==0: return b""
+    g=cv2.cvtColor(cv2.resize(bgr,(16,16),interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2GRAY)
+    mean=int(g.mean()); bits=(g>mean).astype(np.uint8)
+    # pack 256 bits -> 32 bytes
+    return np.packbits(bits.reshape(-1)).tobytes()
 
 def main():
     args = parse_args()
@@ -55,6 +82,12 @@ def main():
 
     os.environ.setdefault("OMP_NUM_THREADS", str(args.threads))
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
+    stop_flag={"v":False}
+    def _sigint(_a,_b):
+        stop_flag["v"]=True
+    signal.signal(signal.SIGINT, _sigint)
+    signal.signal(signal.SIGTERM, _sigint)
 
     det = YoloDetector(weights=args.weights, imgsz=args.imgsz, conf=args.conf,
                        preview=args.preview, threads=args.threads)
@@ -66,13 +99,15 @@ def main():
         worker = mp.Process(target=ocr_worker, args=(input_q, output_q), daemon=True)
         worker.start(); print("✅ OCR worker started")
 
-    tracks = {}  # tid -> {model, conf, locked, raw, silent, seen, last_dump}
+    # tid -> info
+    # info: model, conf, locked, raw, silent, seen, last_dump, fp (fingerprint), fresh_frames
+    tracks = {}
     fps_hist=[]; frame_idx=0; start=time.time()
-    last_save=0.0; total_ocr_ms=0.0; ocr_runs=0; calls=0; dumps_this_frame=0
+    last_save=0.0; total_ocr_ms=0.0; ocr_runs=0; calls=0
     expected = args.expected_model.upper().replace(" ","")
 
     try:
-        while True:
+        while not stop_flag["v"]:
             t0 = time.time()
             frame = det.capture_bgr()
             dets = det.track_once(frame)
@@ -90,7 +125,7 @@ def main():
                 budget = min(det_count, 8) if args.ocr_budget < 0 else min(det_count, args.ocr_budget)
                 if input_q.qsize() > 48: budget = 0
 
-            # 新目标优先：没任何结果/未锁定的排在前面
+            # 新目标优先：未锁定 + 没模型的排前
             valid.sort(key=lambda d: (
                 tracks.get(d["track_id"], {}).get("locked", False),
                 tracks.get(d["track_id"], {}).get("model","")!=""
@@ -104,8 +139,11 @@ def main():
                 ids.add(tid)
 
                 info = tracks.get(tid, {"model":"", "conf":0.0, "locked":False, "raw":"",
-                                        "silent":0, "seen":0, "last_dump":-9999})
+                                        "silent":0, "seen":0, "last_dump":-9999,
+                                        "fp":b"", "fresh_frames":0})
                 info["seen"] += 1
+                if info["fresh_frames"] < 999999:  # 防止溢出
+                    info["fresh_frames"] += 1
 
                 do_ocr = args.ocr and (frame_idx % args.ocr_every == 0) and (not info["locked"]) and (budget>0)
 
@@ -119,40 +157,57 @@ def main():
                         ox2,oy2=min(det.main_w,X2+px), min(det.main_h,Y2+py)
                         crop=frame[oy1:oy2, ox1:ox2]
 
+                        # 动态中心收缩：若高光过量则增强收缩
                         shrink=max(0.0, min(0.4, args.center_shrink))
-                        if shrink>0.0:
+                        if crop is not None and crop.size>0:
+                            gray=cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
+                            glare_ratio=float((gray>230).sum())/float(gray.size)
+                            if glare_ratio > args.glare_thr*1.2:
+                                shrink=min(0.35, shrink+0.08)
+                        if shrink>0.0 and crop is not None and crop.size>0:
                             cw,ch=ox2-ox1, oy2-oy1
                             cx1=ox1+int(cw*shrink); cy1=oy1+int(ch*shrink)
                             cx2=ox2-int(cw*shrink); cy2=oy2-int(ch*shrink)
                             if cx2>cx1 and cy2>cy1:
                                 crop=frame[cy1:cy2, cx1:cx2]
 
-                        if crop is not None and crop.size>0:
-                            # ROI 保存（限速）
-                            if args.roi_dir and args.dump_rate>0 and dumps_this_frame<args.max_dump_per_frame:
-                                if info["seen"] - info["last_dump"] >= args.dump_rate:
-                                    dump_id = f"tid{tid}_f{frame_idx}_{int(time.time()*1000)}"
-                                    cv2.imwrite(os.path.join(args.roi_dir, f"roi_{dump_id}.jpg"), crop)
-                                    info["last_dump"] = info["seen"]; dumps_this_frame += 1
+                        # 质量门：模糊/高光过多不送 OCR
+                        if crop is not None and crop.size>0 and roi_quality_ok(crop, args.blur_thr, args.glare_thr):
+
+                            # 指纹去重：画面几乎没变就不送
+                            fp=tiny_fingerprint(crop)
+                            if fp == info.get("fp", b""):
+                                info["silent"]=6  # 稍后再说
+                            else:
+                                info["fp"]=fp
+                                # ROI 保存（限速）
+                                if args.roi_dir and args.dump_rate>0 and dumps_this_frame<args.max_dump_per_frame:
+                                    if info["seen"] - info["last_dump"] >= args.dump_rate:
+                                        dump_id = f"tid{tid}_f{frame_idx}_{int(time.time()*1000)}"
+                                        cv2.imwrite(os.path.join(args.roi_dir, f"roi_{dump_id}.jpg"), crop)
+                                        info["last_dump"] = info["seen"]; dumps_this_frame += 1
+                                    else:
+                                        dump_id = f"tid{tid}_f{frame_idx}_{uuid.uuid4().hex[:6]}"
                                 else:
                                     dump_id = f"tid{tid}_f{frame_idx}_{uuid.uuid4().hex[:6]}"
-                            else:
-                                dump_id = f"tid{tid}_f{frame_idx}_{uuid.uuid4().hex[:6]}"
 
-                            try:
-                                input_q.put_nowait({
-                                    "tid":tid, "crop":crop, "expected":expected,
-                                    "pre_dir": args.pre_dir,          # 让 worker 保存预处理图
-                                    "max_vars": args.max_vars,
-                                    "use_tess": (not args.no_tess),
-                                    "dump_token": dump_id
-                                })
-                                calls+=1; budget-=1
-                                info["silent"]=6
-                            except Exception:
-                                pass
+                                try:
+                                    input_q.put_nowait({
+                                        "tid":tid, "crop":crop, "expected":expected,
+                                        "pre_dir": args.pre_dir,
+                                        "max_vars": args.max_vars,
+                                        "use_tess": (not args.no_tess),
+                                        "dump_token": dump_id
+                                    })
+                                    calls+=1; budget-=1
+                                    info["silent"]=6
+                                except Exception:
+                                    pass
+                        else:
+                            # 太模糊/太亮 → 再等几帧
+                            info["silent"]=3
 
-                # 颜色与显示
+                # 上色与显示
                 model = info["model"] if info["model"] else "?"
                 color=(255,255,255)
                 if expected and info["locked"] and info["model"]:
@@ -201,24 +256,29 @@ def main():
 
             if not args.headless:
                 cv2.imshow("Async YOLO + OCR", frame)
-                if cv2.waitKey(1)&0xFF==27: break
+                if cv2.waitKey(1)&0xFF==27: 
+                    stop_flag["v"]=True
 
             now=time.time()
-            if (len(valid)==0 or (args.conf + 0.10)>0 and low) and (now-last_save>1.0):
+            if (len(valid)==0 or low) and (now-last_save>1.0):
                 fn=f"hard_{len(valid)}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
                 cv2.imwrite(os.path.join(args.save_dir, fn), frame); last_save=now
 
     finally:
-        det.close()
-        if args.ocr and worker is not None and worker.is_alive():
-            try:
+        # 优雅收尾
+        try:
+            if args.ocr and worker is not None and worker.is_alive():
                 input_q.put(None); worker.join(timeout=1.0)
-            except Exception:
-                try: worker.terminate()
-                except Exception: pass
-        if not args.headless:
-            try: cv2.destroyAllWindows()
+        except Exception:
+            try: worker.terminate()
             except Exception: pass
+        try:
+            if not args.headless: cv2.destroyAllWindows()
+        except Exception: pass
+        try:
+            det.close()
+        except Exception: pass
+
         el=time.time()-start
         print(f"\nFrames:{frame_idx} | Time:{el:.1f}s | FPS:{frame_idx/max(el,1):.1f}")
         if args.ocr and ocr_runs:
