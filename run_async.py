@@ -1,5 +1,4 @@
-# run_async.py
-import os, time, argparse
+import os, time, argparse, uuid
 import cv2, numpy as np
 import multiprocessing as mp
 from datetime import datetime
@@ -27,14 +26,23 @@ def parse_args():
 
     # OCR 调度参数
     ap.add_argument("--ocr", action="store_true")
-    ap.add_argument("--ocr_every", type=int, default=2)         # 更频繁：降低堆积
-    ap.add_argument("--ocr_budget", type=int, default=-1,       # -1 = 自适应：min(det_count, 8)
-                    help="-1 for auto; otherwise max OCR ROIs per frame")
+    ap.add_argument("--ocr_every", type=int, default=2)
+    ap.add_argument("--ocr_budget", type=int, default=-1)      # -1 自适应
     ap.add_argument("--ocr_lock_conf", type=float, default=0.50)
-    ap.add_argument("--ocr_pad", type=float, default=0.12)
-    ap.add_argument("--center_shrink", type=float, default=0.18)
+    ap.add_argument("--ocr_pad", type=float, default=0.10)     # 略再小一点
+    ap.add_argument("--center_shrink", type=float, default=0.20)
 
-    ap.add_argument("--expected_model", default="", help="如 CR2025，用于着色")
+    # 诊断与存盘
+    ap.add_argument("--roi_dir", default="", help="保存原始 OCR ROI 的目录（空=不保存）")
+    ap.add_argument("--pre_dir", default="", help="保存预处理变体图的目录（空=不保存）")
+    ap.add_argument("--dump_rate", type=int, default=0, help="同一目标每 N 帧最多保存一次（0=不保存）")
+    ap.add_argument("--max_dump_per_frame", type=int, default=8, help="每帧最多保存几张，防止 IO 爆")
+
+    # 速度相关
+    ap.add_argument("--no_tess", action="store_true", help="关闭 Tesseract 回退，仅用 RapidOCR")
+    ap.add_argument("--max_vars", type=int, default=4, help="预处理变体上限（2~5）")
+
+    ap.add_argument("--expected_model", default="")
     ap.add_argument("--save_dir", default="/home/pi/hard_cases")
     ap.add_argument("--threads", type=int, default=4)
     return ap.parse_args()
@@ -42,8 +50,9 @@ def parse_args():
 def main():
     args = parse_args()
     ensure_dir(args.save_dir)
+    if args.roi_dir: ensure_dir(args.roi_dir)
+    if args.pre_dir: ensure_dir(args.pre_dir)
 
-    # 限制并行库线程，避免互拖
     os.environ.setdefault("OMP_NUM_THREADS", str(args.threads))
     os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 
@@ -57,9 +66,9 @@ def main():
         worker = mp.Process(target=ocr_worker, args=(input_q, output_q), daemon=True)
         worker.start(); print("✅ OCR worker started")
 
-    tracks = {}  # tid -> {model, conf, locked, raw, silent}
+    tracks = {}  # tid -> {model, conf, locked, raw, silent, seen, last_dump}
     fps_hist=[]; frame_idx=0; start=time.time()
-    last_save=0.0; total_ocr_ms=0.0; ocr_runs=0; calls=0
+    last_save=0.0; total_ocr_ms=0.0; ocr_runs=0; calls=0; dumps_this_frame=0
     expected = args.expected_model.upper().replace(" ","")
 
     try:
@@ -68,37 +77,41 @@ def main():
             frame = det.capture_bgr()
             dets = det.track_once(frame)
 
-            det_count = 0; low=False; ids=set()
-            do_ocr = args.ocr and (frame_idx % args.ocr_every == 0)
-
-            # 先统计本帧有效对象数
-            valid_dets=[]
+            valid=[]
             for d in dets:
                 (X1,Y1,X2,Y2) = d["xyxy"]
-                if (X2-X1)*(Y2-Y1) < args.min_area: 
-                    continue
-                valid_dets.append(d)
-            det_count = len(valid_dets)
+                if (X2-X1)*(Y2-Y1) >= args.min_area:
+                    valid.append(d)
 
             # 自适应预算 + 背压
             budget = 0
             if args.ocr:
+                det_count=len(valid)
                 budget = min(det_count, 8) if args.ocr_budget < 0 else min(det_count, args.ocr_budget)
-                if input_q.qsize() > 48:    # 背压：队列大就暂时不送，防堆积
-                    budget = 0
+                if input_q.qsize() > 48: budget = 0
 
-            for d in valid_dets:
+            # 新目标优先：没任何结果/未锁定的排在前面
+            valid.sort(key=lambda d: (
+                tracks.get(d["track_id"], {}).get("locked", False),
+                tracks.get(d["track_id"], {}).get("model","")!=""
+            ))
+
+            ids=set(); low=False; dumps_this_frame=0
+            for d in valid:
                 (X1,Y1,X2,Y2) = d["xyxy"]
                 conf = d["conf"]; tid = d["track_id"]
                 if conf < (args.conf + 0.10): low=True
                 ids.add(tid)
 
-                info = tracks.get(tid, {"model":"", "conf":0.0, "locked":False, "raw":"", "silent":0})
+                info = tracks.get(tid, {"model":"", "conf":0.0, "locked":False, "raw":"",
+                                        "silent":0, "seen":0, "last_dump":-9999})
+                info["seen"] += 1
 
-                # 调度 OCR：padding + （可选）中心收缩 + 静默节流
-                if do_ocr and (not info["locked"]) and budget>0 and args.ocr:
-                    if info["silent"] > 0:
-                        info["silent"] -= 1
+                do_ocr = args.ocr and (frame_idx % args.ocr_every == 0) and (not info["locked"]) and (budget>0)
+
+                if do_ocr:
+                    if info["silent"]>0:
+                        info["silent"]-=1
                     else:
                         pad=args.ocr_pad; w,h=X2-X1, Y2-Y1
                         px,py=int(w*pad),int(h*pad)
@@ -115,43 +128,57 @@ def main():
                                 crop=frame[cy1:cy2, cx1:cx2]
 
                         if crop is not None and crop.size>0:
+                            # ROI 保存（限速）
+                            if args.roi_dir and args.dump_rate>0 and dumps_this_frame<args.max_dump_per_frame:
+                                if info["seen"] - info["last_dump"] >= args.dump_rate:
+                                    dump_id = f"tid{tid}_f{frame_idx}_{int(time.time()*1000)}"
+                                    cv2.imwrite(os.path.join(args.roi_dir, f"roi_{dump_id}.jpg"), crop)
+                                    info["last_dump"] = info["seen"]; dumps_this_frame += 1
+                                else:
+                                    dump_id = f"tid{tid}_f{frame_idx}_{uuid.uuid4().hex[:6]}"
+                            else:
+                                dump_id = f"tid{tid}_f{frame_idx}_{uuid.uuid4().hex[:6]}"
+
                             try:
-                                input_q.put_nowait({"tid":tid, "crop":crop, "expected":expected})
+                                input_q.put_nowait({
+                                    "tid":tid, "crop":crop, "expected":expected,
+                                    "pre_dir": args.pre_dir,          # 让 worker 保存预处理图
+                                    "max_vars": args.max_vars,
+                                    "use_tess": (not args.no_tess),
+                                    "dump_token": dump_id
+                                })
                                 calls+=1; budget-=1
-                                info["silent"]=6   # 接下来 6 帧不再送，避免重复
+                                info["silent"]=6
                             except Exception:
                                 pass
 
-                # 颜色 & 文本（锁定且与 expected 不符→红）
+                # 颜色与显示
                 model = info["model"] if info["model"] else "?"
+                color=(255,255,255)
                 if expected and info["locked"] and info["model"]:
                     color=(255,255,0) if info["model"]==expected else (0,0,255)
-                else:
-                    color=(255,255,255)
                 label=f"{model} | {info.get('conf',0.0):.2f}"
                 draw_box(frame, X1,Y1,X2,Y2, label, color)
                 tracks[tid]=info
 
-            # 取回 OCR 结果
+            # 收取 OCR 结果
             if args.ocr:
                 import queue
                 while True:
                     try:
-                        res = output_q.get_nowait()
+                        res=output_q.get_nowait()
                     except queue.Empty:
                         break
                     tid=res["tid"]; info=tracks.get(tid)
                     if info is None: continue
-                    model=res.get("model","")
-                    prob=float(res.get("prob",0.0))
+                    model=res.get("model",""); prob=float(res.get("prob",0.0))
                     raw=res.get("raw","")
                     if raw: info["raw"]=raw
                     changed=False
                     if model and (prob>info["conf"] or not info["model"]):
                         info["model"]=model; info["conf"]=prob; changed=True
                     if changed and prob>=args.ocr_lock_conf:
-                        info["locked"]=True
-                        info["silent"]=12  # 锁定后更长静默
+                        info["locked"]=True; info["silent"]=12
                     tracks[tid]=info
                     total_ocr_ms+=float(res.get("ms",0.0)); ocr_runs+=1
 
@@ -159,18 +186,17 @@ def main():
             for tid in [t for t in list(tracks.keys()) if t not in ids]:
                 tracks.pop(tid, None)
 
-            # HUD/FPS
+            # HUD
             frame_idx+=1
             dt=(time.time()-t0)*1000.0
             fps=(1000.0/max(dt,1.0)); fps_hist.append(fps)
             if len(fps_hist)>30: fps_hist.pop(0)
             fps_avg=sum(fps_hist)/len(fps_hist)
-            hud=f"Det:{det_count} | {dt:.1f}ms | {fps_avg:.1f}FPS | OCR:{'ON' if args.ocr else 'OFF'}"
+            hud=f"Det:{len(valid)} | {dt:.1f}ms | {fps_avg:.1f}FPS | OCR:{'ON' if args.ocr else 'OFF'}"
             if args.ocr:
                 hud+=f" calls:{calls}"
                 if ocr_runs: hud+=f" avg:{(total_ocr_ms/max(ocr_runs,1)):.1f}ms"
-            if expected:
-                hud+=f" | EXPECT:{expected}"
+            if expected: hud+=f" | EXPECT:{expected}"
             cv2.putText(frame, hud, (10,28), cv2.FONT_HERSHEY_SIMPLEX,0.6,(0,255,255),2)
 
             if not args.headless:
@@ -178,8 +204,8 @@ def main():
                 if cv2.waitKey(1)&0xFF==27: break
 
             now=time.time()
-            if (det_count==0 or low) and (now-last_save>1.0):
-                fn=f"hard_{det_count}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
+            if (len(valid)==0 or (args.conf + 0.10)>0 and low) and (now-last_save>1.0):
+                fn=f"hard_{len(valid)}_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.jpg"
                 cv2.imwrite(os.path.join(args.save_dir, fn), frame); last_save=now
 
     finally:
