@@ -1,3 +1,4 @@
+# ocr_module.py
 import re, os, cv2, numpy as np
 from typing import List, Tuple, Optional
 
@@ -29,7 +30,7 @@ def _normalize_text(t:str)->str:
     s = (s.replace("O","0").replace("S","5").replace("Z","2").replace("B","8"))
     return re.sub(r"\s+"," ",s).strip()
 
-def extract_models(txt:str)->List[str]:
+def extract_models(txt:str):
     txt=_normalize_text(txt)
     cand=set()
     for m in re.finditer(r"CR\s*(\d{4})", txt):
@@ -42,7 +43,6 @@ def extract_models(txt:str)->List[str]:
     return sorted(cand, key=lambda x: (x not in ALLOWED, x))
 
 def make_variants(bgr, max_vars:int=4):
-    """返回少量高价值变体：sharp / otsu / inv / strong + 180° 的 sharp。"""
     outs=[]
     if bgr is None or bgr.size==0: return outs
     h,w=bgr.shape[:2]
@@ -59,11 +59,9 @@ def make_variants(bgr, max_vars:int=4):
 
     base=[sharp,otsu,inv,strong][:max_vars]
     outs=[cv2.cvtColor(x,cv2.COLOR_GRAY2RGB) for x in base]
-    # 只加一个 180 度
     outs.append(cv2.rotate(cv2.cvtColor(sharp,cv2.COLOR_GRAY2RGB), cv2.ROTATE_180))
     return outs
 
-# 单例 RapidOCR
 _RAPID=None
 def _get_rapid():
     global _RAPID
@@ -75,7 +73,7 @@ def _get_rapid():
             _RAPID=False
     return _RAPID
 
-def rapidocr_read(imgs, early_stop=True)->List[Tuple[str,float,str]]:
+def rapidocr_read(imgs, early_stop=True):
     ocr=_get_rapid()
     if not ocr: return []
     outs=[]
@@ -97,7 +95,7 @@ def rapidocr_read(imgs, early_stop=True)->List[Tuple[str,float,str]]:
             pass
     return outs
 
-def tesseract_read(imgs)->List[Tuple[str,float,str]]:
+def tesseract_read(imgs):
     try:
         import pytesseract
     except Exception:
@@ -106,7 +104,7 @@ def tesseract_read(imgs)->List[Tuple[str,float,str]]:
     for i,im in enumerate(imgs):
         gray=cv2.cvtColor(im,cv2.COLOR_RGB2GRAY)
         best_txt=""; any_added=False
-        for psm in (6,7,13):  # 精简 psm 组合提速
+        for psm in (6,7,13):
             try:
                 txt=pytesseract.image_to_string(gray,config=f"--oem 3 --psm {psm}")
                 txt=txt.replace("\n"," ").strip()
@@ -149,12 +147,11 @@ def ocr_worker(input_q, output_q):
         t0=time.time()
         variants=make_variants(crop, max_vars=max_vars)
 
-        # 可选地保存预处理图
         if pre_dir:
             os.makedirs(pre_dir, exist_ok=True)
             for idx,img in enumerate(variants):
-                cv2.imwrite(os.path.join(
-                    pre_dir, f"pre_{dump_token}_v{idx:02d}.jpg"), cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
+                cv2.imwrite(os.path.join(pre_dir, f"pre_{dump_token}_v{idx:02d}.jpg"),
+                            cv2.cvtColor(img, cv2.COLOR_RGB2BGR))
 
         results=rapidocr_read(variants) or (tesseract_read(variants) if use_tess else [])
         join, models, best_conf = choose_best(results, expected=expected)
