@@ -1,0 +1,19 @@
+source ~/ai-env/bin/activate
+
+export OMP_NUM_THREADS=4
+export OPENBLAS_NUM_THREADS=1
+export ONNXRUNTIME_THREADING_FACTOR=1
+
+
+
+python3 /home/pi/battery_ai/run_async.py \
+  --weights /home/pi/battery_ai/best_ncnn_model \
+  --imgsz 320 --conf 0.35 \
+  --ocr --ocr_every 2 --ocr_budget -1 \
+  --ocr_pad 0.10 --center_shrink 0.20 --ocr_lock_conf 0.50 \
+  --expected_model CR2025 \
+  --no_tess --max_vars 4 \
+  --roi_dir /home/pi/ocr_dump/roi --pre_dir /home/pi/ocr_dump/pre \
+  --dump_rate 8 --max_dump_per_frame 8 \
+  --blur_thr 45 --glare_thr 0.24 \
+  --preview
