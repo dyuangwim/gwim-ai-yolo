@@ -25,12 +25,8 @@ python3 /home/pi/battery_ai/run_async.py \
 
 source ~/ai-env/bin/activate
 
-python3 /home/pi/battery_batch/detect_batch.py \
-  --card_weights /home/pi/models/card_ncnn \
-  --bat_weights  /home/pi/models/battery_ncnn \
+thon3 /home/pi/battery_batch/detect_batch.py \
+  --card_weights /home/pi/models/card_ncnn_model \
+  --bat_weights  /home/pi/models/battery_ncnn_model \
   --img /home/pi/batch_images/sample_10packs.jpg \
-  --expected 2 \
-  --rotate 90 \
-  --out_dir /home/pi/batch_out \
-  --card_imgsz 640 --bat_imgsz 416 \
-  --card_conf 0.35 --bat_conf 0.35
+  --expected 2 --rotate 90 --out_dir /home/pi/batch_out
