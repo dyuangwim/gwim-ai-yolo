@@ -1,0 +1,3905 @@
+{
+  "latency_ms": 51934.083700180054,
+  "packs": [
+    {
+      "pack_index": 0,
+      "card_box": [
+        0,
+        153,
+        154,
+        328
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 1,
+      "card_box": [
+        75,
+        148,
+        293,
+        329
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 2,
+      "card_box": [
+        40,
+        123,
+        242,
+        326
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 3,
+      "card_box": [
+        24,
+        158,
+        208,
+        329
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 4,
+      "card_box": [
+        0,
+        140,
+        108,
+        328
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 5,
+      "card_box": [
+        358,
+        151,
+        566,
+        318
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 6,
+      "card_box": [
+        391,
+        160,
+        548,
+        323
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 7,
+      "card_box": [
+        329,
+        150,
+        522,
+        321
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 8,
+      "card_box": [
+        34,
+        0,
+        689,
+        157
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 9,
+      "card_box": [
+        0,
+        0,
+        602,
+        182
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 10,
+      "card_box": [
+        273,
+        168,
+        459,
+        337
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 11,
+      "card_box": [
+        0,
+        208,
+        195,
+        388
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 12,
+      "card_box": [
+        147,
+        197,
+        340,
+        384
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 13,
+      "card_box": [
+        0,
+        0,
+        504,
+        161
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 14,
+      "card_box": [
+        223,
+        176,
+        466,
+        326
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 15,
+      "card_box": [
+        194,
+        137,
+        411,
+        329
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 16,
+      "card_box": [
+        165,
+        137,
+        370,
+        327
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 17,
+      "card_box": [
+        148,
+        170,
+        355,
+        329
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 18,
+      "card_box": [
+        181,
+        152,
+        334,
+        333
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 19,
+      "card_box": [
+        132,
+        151,
+        311,
+        328
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 20,
+      "card_box": [
+        98,
+        129,
+        246,
+        320
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 21,
+      "card_box": [
+        272,
+        130,
+        393,
+        314
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 22,
+      "card_box": [
+        135,
+        123,
+        384,
+        310
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 23,
+      "card_box": [
+        103,
+        93,
+        323,
+        307
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 24,
+      "card_box": [
+        91,
+        70,
+        287,
+        314
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 25,
+      "card_box": [
+        0,
+        144,
+        209,
+        310
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 26,
+      "card_box": [
+        0,
+        116,
+        133,
+        316
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 27,
+      "card_box": [
+        0,
+        131,
+        89,
+        323
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 28,
+      "card_box": [
+        0,
+        0,
+        427,
+        96
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 29,
+      "card_box": [
+        0,
+        0,
+        401,
+        124
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 30,
+      "card_box": [
+        0,
+        0,
+        386,
+        129
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 31,
+      "card_box": [
+        0,
+        0,
+        235,
+        122
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 32,
+      "card_box": [
+        0,
+        0,
+        237,
+        120
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 33,
+      "card_box": [
+        0,
+        0,
+        642,
+        70
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 34,
+      "card_box": [
+        18,
+        0,
+        505,
+        87
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 35,
+      "card_box": [
+        0,
+        0,
+        103,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 36,
+      "card_box": [
+        0,
+        0,
+        402,
+        136
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 37,
+      "card_box": [
+        0,
+        0,
+        402,
+        177
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 38,
+      "card_box": [
+        276,
+        132,
+        516,
+        311
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 39,
+      "card_box": [
+        245,
+        98,
+        448,
+        314
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 40,
+      "card_box": [
+        77,
+        0,
+        313,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 41,
+      "card_box": [
+        12,
+        0,
+        182,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 42,
+      "card_box": [
+        0,
+        0,
+        213,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 43,
+      "card_box": [
+        24,
+        0,
+        237,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 44,
+      "card_box": [
+        142,
+        0,
+        357,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 45,
+      "card_box": [
+        119,
+        0,
+        341,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 46,
+      "card_box": [
+        181,
+        0,
+        384,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 47,
+      "card_box": [
+        220,
+        0,
+        423,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 48,
+      "card_box": [
+        240,
+        0,
+        445,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 49,
+      "card_box": [
+        371,
+        0,
+        527,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 50,
+      "card_box": [
+        257,
+        0,
+        397,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 51,
+      "card_box": [
+        264,
+        0,
+        468,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 52,
+      "card_box": [
+        306,
+        0,
+        456,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 53,
+      "card_box": [
+        330,
+        0,
+        541,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 54,
+      "card_box": [
+        365,
+        0,
+        572,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 55,
+      "card_box": [
+        0,
+        0,
+        74,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 56,
+      "card_box": [
+        0,
+        0,
+        145,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 57,
+      "card_box": [
+        0,
+        0,
+        166,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 58,
+      "card_box": [
+        0,
+        0,
+        117,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 59,
+      "card_box": [
+        0,
+        0,
+        122,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 60,
+      "card_box": [
+        109,
+        176,
+        314,
+        359
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 61,
+      "card_box": [
+        0,
+        0,
+        198,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 62,
+      "card_box": [
+        33,
+        0,
+        212,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 63,
+      "card_box": [
+        292,
+        0,
+        504,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 64,
+      "card_box": [
+        57,
+        0,
+        239,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 65,
+      "card_box": [
+        104,
+        0,
+        314,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 66,
+      "card_box": [
+        50,
+        0,
+        267,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 1.0
+    },
+    {
+      "pack_index": 67,
+      "card_box": [
+        130,
+        94,
+        384,
+        278
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 68,
+      "card_box": [
+        348,
+        119,
+        514,
+        293
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 69,
+      "card_box": [
+        0,
+        118,
+        205,
+        282
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 70,
+      "card_box": [
+        41,
+        115,
+        220,
+        282
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 71,
+      "card_box": [
+        226,
+        115,
+        409,
+        280
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 72,
+      "card_box": [
+        272,
+        105,
+        386,
+        283
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 73,
+      "card_box": [
+        118,
+        104,
+        234,
+        284
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 74,
+      "card_box": [
+        80,
+        104,
+        284,
+        282
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 75,
+      "card_box": [
+        58,
+        148,
+        280,
+        280
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 76,
+      "card_box": [
+        208,
+        168,
+        434,
+        348
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 77,
+      "card_box": [
+        0,
+        82,
+        115,
+        286
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 78,
+      "card_box": [
+        295,
+        198,
+        454,
+        359
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 79,
+      "card_box": [
+        233,
+        204,
+        468,
+        360
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 80,
+      "card_box": [
+        34,
+        161,
+        245,
+        347
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 81,
+      "card_box": [
+        0,
+        186,
+        195,
+        351
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9990234375
+    },
+    {
+      "pack_index": 82,
+      "card_box": [
+        191,
+        146,
+        421,
+        281
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.998046875
+    },
+    {
+      "pack_index": 83,
+      "card_box": [
+        344,
+        185,
+        556,
+        327
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.998046875
+    },
+    {
+      "pack_index": 84,
+      "card_box": [
+        410,
+        0,
+        598,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.998046875
+    },
+    {
+      "pack_index": 85,
+      "card_box": [
+        0,
+        154,
+        63,
+        346
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.998046875
+    },
+    {
+      "pack_index": 86,
+      "card_box": [
+        195,
+        83,
+        395,
+        299
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9970703125
+    },
+    {
+      "pack_index": 87,
+      "card_box": [
+        286,
+        119,
+        462,
+        302
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9970703125
+    },
+    {
+      "pack_index": 88,
+      "card_box": [
+        298,
+        168,
+        501,
+        343
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9970703125
+    },
+    {
+      "pack_index": 89,
+      "card_box": [
+        441,
+        172,
+        608,
+        305
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9970703125
+    },
+    {
+      "pack_index": 90,
+      "card_box": [
+        0,
+        175,
+        161,
+        352
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9970703125
+    },
+    {
+      "pack_index": 91,
+      "card_box": [
+        34,
+        159,
+        472,
+        462
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9970703125
+    },
+    {
+      "pack_index": 92,
+      "card_box": [
+        0,
+        0,
+        86,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9970703125
+    },
+    {
+      "pack_index": 93,
+      "card_box": [
+        207,
+        112,
+        430,
+        301
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.99609375
+    },
+    {
+      "pack_index": 94,
+      "card_box": [
+        108,
+        165,
+        384,
+        471
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.99609375
+    },
+    {
+      "pack_index": 95,
+      "card_box": [
+        257,
+        74,
+        470,
+        274
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.99609375
+    },
+    {
+      "pack_index": 96,
+      "card_box": [
+        0,
+        202,
+        105,
+        335
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.99609375
+    },
+    {
+      "pack_index": 97,
+      "card_box": [
+        0,
+        153,
+        354,
+        468
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.99609375
+    },
+    {
+      "pack_index": 98,
+      "card_box": [
+        275,
+        98,
+        522,
+        274
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9951171875
+    },
+    {
+      "pack_index": 99,
+      "card_box": [
+        167,
+        176,
+        365,
+        364
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.994140625
+    },
+    {
+      "pack_index": 100,
+      "card_box": [
+        249,
+        153,
+        411,
+        323
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.994140625
+    },
+    {
+      "pack_index": 101,
+      "card_box": [
+        117,
+        155,
+        537,
+        468
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.994140625
+    },
+    {
+      "pack_index": 102,
+      "card_box": [
+        47,
+        127,
+        179,
+        302
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.994140625
+    },
+    {
+      "pack_index": 103,
+      "card_box": [
+        453,
+        0,
+        597,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9931640625
+    },
+    {
+      "pack_index": 104,
+      "card_box": [
+        0,
+        161,
+        297,
+        466
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9931640625
+    },
+    {
+      "pack_index": 105,
+      "card_box": [
+        58,
+        177,
+        268,
+        331
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9931640625
+    },
+    {
+      "pack_index": 106,
+      "card_box": [
+        381,
+        131,
+        595,
+        447
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9931640625
+    },
+    {
+      "pack_index": 107,
+      "card_box": [
+        94,
+        198,
+        309,
+        389
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9931640625
+    },
+    {
+      "pack_index": 108,
+      "card_box": [
+        346,
+        0,
+        554,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9921875
+    },
+    {
+      "pack_index": 109,
+      "card_box": [
+        0,
+        165,
+        194,
+        325
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9921875
+    },
+    {
+      "pack_index": 110,
+      "card_box": [
+        231,
+        137,
+        464,
+        306
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9921875
+    },
+    {
+      "pack_index": 111,
+      "card_box": [
+        0,
+        0,
+        111,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9921875
+    },
+    {
+      "pack_index": 112,
+      "card_box": [
+        0,
+        130,
+        165,
+        301
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9921875
+    },
+    {
+      "pack_index": 113,
+      "card_box": [
+        0,
+        160,
+        105,
+        346
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9912109375
+    },
+    {
+      "pack_index": 114,
+      "card_box": [
+        114,
+        131,
+        345,
+        332
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.990234375
+    },
+    {
+      "pack_index": 115,
+      "card_box": [
+        316,
+        0,
+        517,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.990234375
+    },
+    {
+      "pack_index": 116,
+      "card_box": [
+        131,
+        162,
+        365,
+        301
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.990234375
+    },
+    {
+      "pack_index": 117,
+      "card_box": [
+        121,
+        0,
+        226,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 118,
+      "card_box": [
+        210,
+        0,
+        434,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 119,
+      "card_box": [
+        157,
+        0,
+        370,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 120,
+      "card_box": [
+        29,
+        0,
+        269,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 121,
+      "card_box": [
+        87,
+        0,
+        242,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 122,
+      "card_box": [
+        0,
+        0,
+        109,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 123,
+      "card_box": [
+        308,
+        141,
+        619,
+        448
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 124,
+      "card_box": [
+        392,
+        0,
+        516,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 125,
+      "card_box": [
+        61,
+        0,
+        209,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 126,
+      "card_box": [
+        128,
+        0,
+        354,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 127,
+      "card_box": [
+        194,
+        0,
+        402,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 128,
+      "card_box": [
+        328,
+        0,
+        459,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 129,
+      "card_box": [
+        262,
+        0,
+        476,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 130,
+      "card_box": [
+        59,
+        0,
+        290,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 131,
+      "card_box": [
+        0,
+        0,
+        153,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 132,
+      "card_box": [
+        23,
+        0,
+        168,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 133,
+      "card_box": [
+        18,
+        0,
+        226,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9892578125
+    },
+    {
+      "pack_index": 134,
+      "card_box": [
+        209,
+        128,
+        330,
+        308
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.98828125
+    },
+    {
+      "pack_index": 135,
+      "card_box": [
+        215,
+        209,
+        423,
+        375
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.98828125
+    },
+    {
+      "pack_index": 136,
+      "card_box": [
+        128,
+        0,
+        524,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.98828125
+    },
+    {
+      "pack_index": 137,
+      "card_box": [
+        230,
+        0,
+        556,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 138,
+      "card_box": [
+        70,
+        0,
+        270,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 139,
+      "card_box": [
+        376,
+        0,
+        583,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 140,
+      "card_box": [
+        294,
+        0,
+        604,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 141,
+      "card_box": [
+        0,
+        0,
+        145,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 142,
+      "card_box": [
+        0,
+        0,
+        206,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 143,
+      "card_box": [
+        19,
+        0,
+        224,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 144,
+      "card_box": [
+        0,
+        0,
+        247,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 145,
+      "card_box": [
+        436,
+        199,
+        603,
+        328
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 146,
+      "card_box": [
+        0,
+        0,
+        324,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 147,
+      "card_box": [
+        163,
+        0,
+        379,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 148,
+      "card_box": [
+        93,
+        0,
+        397,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 149,
+      "card_box": [
+        5,
+        0,
+        449,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 150,
+      "card_box": [
+        0,
+        0,
+        394,
+        299
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 151,
+      "card_box": [
+        204,
+        0,
+        435,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 152,
+      "card_box": [
+        15,
+        0,
+        297,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 153,
+      "card_box": [
+        0,
+        156,
+        237,
+        474
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9873046875
+    },
+    {
+      "pack_index": 154,
+      "card_box": [
+        0,
+        77,
+        109,
+        292
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.986328125
+    },
+    {
+      "pack_index": 155,
+      "card_box": [
+        0,
+        148,
+        207,
+        470
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.986328125
+    },
+    {
+      "pack_index": 156,
+      "card_box": [
+        137,
+        123,
+        319,
+        300
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9853515625
+    },
+    {
+      "pack_index": 157,
+      "card_box": [
+        0,
+        0,
+        188,
+        294
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.984375
+    },
+    {
+      "pack_index": 158,
+      "card_box": [
+        98,
+        102,
+        417,
+        415
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.984375
+    },
+    {
+      "pack_index": 159,
+      "card_box": [
+        0,
+        0,
+        90,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.98291015625
+    },
+    {
+      "pack_index": 160,
+      "card_box": [
+        337,
+        133,
+        567,
+        287
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.98291015625
+    },
+    {
+      "pack_index": 161,
+      "card_box": [
+        42,
+        194,
+        256,
+        378
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.98291015625
+    },
+    {
+      "pack_index": 162,
+      "card_box": [
+        0,
+        0,
+        183,
+        30
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.98095703125
+    },
+    {
+      "pack_index": 163,
+      "card_box": [
+        0,
+        107,
+        64,
+        297
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.98095703125
+    },
+    {
+      "pack_index": 164,
+      "card_box": [
+        0,
+        0,
+        372,
+        264
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97998046875
+    },
+    {
+      "pack_index": 165,
+      "card_box": [
+        15,
+        181,
+        214,
+        370
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97998046875
+    },
+    {
+      "pack_index": 166,
+      "card_box": [
+        391,
+        121,
+        517,
+        291
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97998046875
+    },
+    {
+      "pack_index": 167,
+      "card_box": [
+        0,
+        167,
+        143,
+        467
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97998046875
+    },
+    {
+      "pack_index": 168,
+      "card_box": [
+        322,
+        204,
+        549,
+        370
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97900390625
+    },
+    {
+      "pack_index": 169,
+      "card_box": [
+        164,
+        0,
+        534,
+        57
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97802734375
+    },
+    {
+      "pack_index": 170,
+      "card_box": [
+        0,
+        96,
+        360,
+        413
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97802734375
+    },
+    {
+      "pack_index": 171,
+      "card_box": [
+        66,
+        0,
+        477,
+        52
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97705078125
+    },
+    {
+      "pack_index": 172,
+      "card_box": [
+        230,
+        230,
+        456,
+        390
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97607421875
+    },
+    {
+      "pack_index": 173,
+      "card_box": [
+        325,
+        62,
+        597,
+        390
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97607421875
+    },
+    {
+      "pack_index": 174,
+      "card_box": [
+        269,
+        0,
+        450,
+        32
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97607421875
+    },
+    {
+      "pack_index": 175,
+      "card_box": [
+        0,
+        0,
+        377,
+        29
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97607421875
+    },
+    {
+      "pack_index": 176,
+      "card_box": [
+        0,
+        0,
+        142,
+        47
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97509765625
+    },
+    {
+      "pack_index": 177,
+      "card_box": [
+        72,
+        0,
+        295,
+        32
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97509765625
+    },
+    {
+      "pack_index": 178,
+      "card_box": [
+        204,
+        0,
+        550,
+        322
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97509765625
+    },
+    {
+      "pack_index": 179,
+      "card_box": [
+        278,
+        0,
+        557,
+        25
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97509765625
+    },
+    {
+      "pack_index": 180,
+      "card_box": [
+        0,
+        0,
+        204,
+        53
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97509765625
+    },
+    {
+      "pack_index": 181,
+      "card_box": [
+        0,
+        0,
+        296,
+        48
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97509765625
+    },
+    {
+      "pack_index": 182,
+      "card_box": [
+        73,
+        127,
+        258,
+        264
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97412109375
+    },
+    {
+      "pack_index": 183,
+      "card_box": [
+        0,
+        95,
+        183,
+        264
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97314453125
+    },
+    {
+      "pack_index": 184,
+      "card_box": [
+        0,
+        202,
+        162,
+        384
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97314453125
+    },
+    {
+      "pack_index": 185,
+      "card_box": [
+        111,
+        0,
+        520,
+        320
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97314453125
+    },
+    {
+      "pack_index": 186,
+      "card_box": [
+        292,
+        224,
+        453,
+        388
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97314453125
+    },
+    {
+      "pack_index": 187,
+      "card_box": [
+        0,
+        108,
+        297,
+        413
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.97265625
+    },
+    {
+      "pack_index": 188,
+      "card_box": [
+        216,
+        69,
+        570,
+        390
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9716796875
+    },
+    {
+      "pack_index": 189,
+      "card_box": [
+        41,
+        34,
+        489,
+        318
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9716796875
+    },
+    {
+      "pack_index": 190,
+      "card_box": [
+        0,
+        130,
+        455,
+        414
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9716796875
+    },
+    {
+      "pack_index": 191,
+      "card_box": [
+        45,
+        90,
+        267,
+        262
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9716796875
+    },
+    {
+      "pack_index": 192,
+      "card_box": [
+        101,
+        57,
+        309,
+        240
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9716796875
+    },
+    {
+      "pack_index": 193,
+      "card_box": [
+        0,
+        40,
+        152,
+        317
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9697265625
+    },
+    {
+      "pack_index": 194,
+      "card_box": [
+        0,
+        4,
+        181,
+        318
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.96875
+    },
+    {
+      "pack_index": 195,
+      "card_box": [
+        118,
+        32,
+        437,
+        315
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.96875
+    },
+    {
+      "pack_index": 196,
+      "card_box": [
+        311,
+        0,
+        639,
+        290
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.96875
+    },
+    {
+      "pack_index": 197,
+      "card_box": [
+        0,
+        0,
+        185,
+        83
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9677734375
+    },
+    {
+      "pack_index": 198,
+      "card_box": [
+        72,
+        49,
+        263,
+        259
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9677734375
+    },
+    {
+      "pack_index": 199,
+      "card_box": [
+        198,
+        0,
+        630,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.966796875
+    },
+    {
+      "pack_index": 200,
+      "card_box": [
+        174,
+        0,
+        395,
+        318
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9658203125
+    },
+    {
+      "pack_index": 201,
+      "card_box": [
+        19,
+        0,
+        241,
+        318
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9658203125
+    },
+    {
+      "pack_index": 202,
+      "card_box": [
+        0,
+        24,
+        336,
+        316
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.96533203125
+    },
+    {
+      "pack_index": 203,
+      "card_box": [
+        41,
+        0,
+        368,
+        318
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.96533203125
+    },
+    {
+      "pack_index": 204,
+      "card_box": [
+        0,
+        0,
+        398,
+        219
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.96533203125
+    },
+    {
+      "pack_index": 205,
+      "card_box": [
+        370,
+        0,
+        599,
+        291
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.96435546875
+    },
+    {
+      "pack_index": 206,
+      "card_box": [
+        0,
+        4,
+        266,
+        318
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.96435546875
+    },
+    {
+      "pack_index": 207,
+      "card_box": [
+        86,
+        77,
+        512,
+        413
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.96337890625
+    },
+    {
+      "pack_index": 208,
+      "card_box": [
+        286,
+        0,
+        569,
+        291
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.96240234375
+    },
+    {
+      "pack_index": 209,
+      "card_box": [
+        226,
+        0,
+        539,
+        158
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.96142578125
+    },
+    {
+      "pack_index": 210,
+      "card_box": [
+        358,
+        182,
+        531,
+        372
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95947265625
+    },
+    {
+      "pack_index": 211,
+      "card_box": [
+        0,
+        141,
+        113,
+        269
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.958984375
+    },
+    {
+      "pack_index": 212,
+      "card_box": [
+        266,
+        98,
+        633,
+        387
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95703125
+    },
+    {
+      "pack_index": 213,
+      "card_box": [
+        0,
+        87,
+        211,
+        416
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95703125
+    },
+    {
+      "pack_index": 214,
+      "card_box": [
+        0,
+        234,
+        110,
+        370
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95703125
+    },
+    {
+      "pack_index": 215,
+      "card_box": [
+        234,
+        186,
+        404,
+        366
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9560546875
+    },
+    {
+      "pack_index": 216,
+      "card_box": [
+        85,
+        0,
+        486,
+        154
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.955078125
+    },
+    {
+      "pack_index": 217,
+      "card_box": [
+        264,
+        0,
+        472,
+        298
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.955078125
+    },
+    {
+      "pack_index": 218,
+      "card_box": [
+        122,
+        0,
+        417,
+        262
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9541015625
+    },
+    {
+      "pack_index": 219,
+      "card_box": [
+        0,
+        0,
+        379,
+        129
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95361328125
+    },
+    {
+      "pack_index": 220,
+      "card_box": [
+        76,
+        0,
+        411,
+        129
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95361328125
+    },
+    {
+      "pack_index": 221,
+      "card_box": [
+        34,
+        0,
+        334,
+        130
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95361328125
+    },
+    {
+      "pack_index": 222,
+      "card_box": [
+        204,
+        0,
+        445,
+        298
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95361328125
+    },
+    {
+      "pack_index": 223,
+      "card_box": [
+        116,
+        0,
+        310,
+        131
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95361328125
+    },
+    {
+      "pack_index": 224,
+      "card_box": [
+        184,
+        0,
+        510,
+        102
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95361328125
+    },
+    {
+      "pack_index": 225,
+      "card_box": [
+        0,
+        176,
+        118,
+        372
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95361328125
+    },
+    {
+      "pack_index": 226,
+      "card_box": [
+        190,
+        124,
+        486,
+        451
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95361328125
+    },
+    {
+      "pack_index": 227,
+      "card_box": [
+        182,
+        0,
+        390,
+        262
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95263671875
+    },
+    {
+      "pack_index": 228,
+      "card_box": [
+        0,
+        0,
+        185,
+        135
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95263671875
+    },
+    {
+      "pack_index": 229,
+      "card_box": [
+        76,
+        0,
+        283,
+        129
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95263671875
+    },
+    {
+      "pack_index": 230,
+      "card_box": [
+        0,
+        0,
+        326,
+        162
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95263671875
+    },
+    {
+      "pack_index": 231,
+      "card_box": [
+        235,
+        0,
+        436,
+        127
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95263671875
+    },
+    {
+      "pack_index": 232,
+      "card_box": [
+        0,
+        129,
+        151,
+        411
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95166015625
+    },
+    {
+      "pack_index": 233,
+      "card_box": [
+        285,
+        0,
+        461,
+        129
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95166015625
+    },
+    {
+      "pack_index": 234,
+      "card_box": [
+        122,
+        0,
+        479,
+        100
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95166015625
+    },
+    {
+      "pack_index": 235,
+      "card_box": [
+        72,
+        8,
+        298,
+        302
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95068359375
+    },
+    {
+      "pack_index": 236,
+      "card_box": [
+        0,
+        186,
+        77,
+        362
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.95068359375
+    },
+    {
+      "pack_index": 237,
+      "card_box": [
+        19,
+        0,
+        449,
+        102
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94970703125
+    },
+    {
+      "pack_index": 238,
+      "card_box": [
+        0,
+        0,
+        379,
+        74
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94970703125
+    },
+    {
+      "pack_index": 239,
+      "card_box": [
+        32,
+        0,
+        329,
+        75
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94970703125
+    },
+    {
+      "pack_index": 240,
+      "card_box": [
+        182,
+        0,
+        389,
+        156
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94970703125
+    },
+    {
+      "pack_index": 241,
+      "card_box": [
+        109,
+        0,
+        364,
+        158
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94970703125
+    },
+    {
+      "pack_index": 242,
+      "card_box": [
+        0,
+        0,
+        303,
+        156
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94970703125
+    },
+    {
+      "pack_index": 243,
+      "card_box": [
+        378,
+        0,
+        588,
+        78
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94921875
+    },
+    {
+      "pack_index": 244,
+      "card_box": [
+        0,
+        0,
+        181,
+        155
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94921875
+    },
+    {
+      "pack_index": 245,
+      "card_box": [
+        99,
+        0,
+        531,
+        77
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94921875
+    },
+    {
+      "pack_index": 246,
+      "card_box": [
+        0,
+        0,
+        149,
+        154
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94921875
+    },
+    {
+      "pack_index": 247,
+      "card_box": [
+        301,
+        0,
+        565,
+        130
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94921875
+    },
+    {
+      "pack_index": 248,
+      "card_box": [
+        201,
+        0,
+        633,
+        129
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94921875
+    },
+    {
+      "pack_index": 249,
+      "card_box": [
+        0,
+        0,
+        261,
+        158
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94921875
+    },
+    {
+      "pack_index": 250,
+      "card_box": [
+        26,
+        0,
+        235,
+        157
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94921875
+    },
+    {
+      "pack_index": 251,
+      "card_box": [
+        316,
+        186,
+        507,
+        378
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9482421875
+    },
+    {
+      "pack_index": 252,
+      "card_box": [
+        195,
+        0,
+        619,
+        74
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9482421875
+    },
+    {
+      "pack_index": 253,
+      "card_box": [
+        0,
+        0,
+        457,
+        262
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9482421875
+    },
+    {
+      "pack_index": 254,
+      "card_box": [
+        0,
+        0,
+        139,
+        99
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9482421875
+    },
+    {
+      "pack_index": 255,
+      "card_box": [
+        0,
+        0,
+        177,
+        103
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9482421875
+    },
+    {
+      "pack_index": 256,
+      "card_box": [
+        0,
+        0,
+        273,
+        104
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9482421875
+    },
+    {
+      "pack_index": 257,
+      "card_box": [
+        0,
+        0,
+        145,
+        153
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9482421875
+    },
+    {
+      "pack_index": 258,
+      "card_box": [
+        305,
+        112,
+        503,
+        284
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9462890625
+    },
+    {
+      "pack_index": 259,
+      "card_box": [
+        0,
+        0,
+        334,
+        262
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9462890625
+    },
+    {
+      "pack_index": 260,
+      "card_box": [
+        311,
+        0,
+        634,
+        237
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94482421875
+    },
+    {
+      "pack_index": 261,
+      "card_box": [
+        0,
+        0,
+        301,
+        262
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94482421875
+    },
+    {
+      "pack_index": 262,
+      "card_box": [
+        0,
+        0,
+        254,
+        78
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94482421875
+    },
+    {
+      "pack_index": 263,
+      "card_box": [
+        0,
+        0,
+        469,
+        177
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94384765625
+    },
+    {
+      "pack_index": 264,
+      "card_box": [
+        0,
+        0,
+        658,
+        575
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94287109375
+    },
+    {
+      "pack_index": 265,
+      "card_box": [
+        0,
+        0,
+        598,
+        115
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94189453125
+    },
+    {
+      "pack_index": 266,
+      "card_box": [
+        0,
+        0,
+        151,
+        261
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94189453125
+    },
+    {
+      "pack_index": 267,
+      "card_box": [
+        424,
+        226,
+        594,
+        368
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94140625
+    },
+    {
+      "pack_index": 268,
+      "card_box": [
+        0,
+        18,
+        573,
+        575
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.94140625
+    },
+    {
+      "pack_index": 269,
+      "card_box": [
+        244,
+        8,
+        427,
+        256
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9404296875
+    },
+    {
+      "pack_index": 270,
+      "card_box": [
+        377,
+        0,
+        593,
+        237
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.939453125
+    },
+    {
+      "pack_index": 271,
+      "card_box": [
+        23,
+        0,
+        234,
+        263
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9375
+    },
+    {
+      "pack_index": 272,
+      "card_box": [
+        0,
+        0,
+        89,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.93603515625
+    },
+    {
+      "pack_index": 273,
+      "card_box": [
+        471,
+        0,
+        610,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.93408203125
+    },
+    {
+      "pack_index": 274,
+      "card_box": [
+        0,
+        179,
+        86,
+        377
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9326171875
+    },
+    {
+      "pack_index": 275,
+      "card_box": [
+        256,
+        41,
+        459,
+        244
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.931640625
+    },
+    {
+      "pack_index": 276,
+      "card_box": [
+        118,
+        0,
+        411,
+        208
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.92919921875
+    },
+    {
+      "pack_index": 277,
+      "card_box": [
+        41,
+        62,
+        239,
+        274
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.927734375
+    },
+    {
+      "pack_index": 278,
+      "card_box": [
+        183,
+        0,
+        386,
+        207
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.927734375
+    },
+    {
+      "pack_index": 279,
+      "card_box": [
+        0,
+        110,
+        156,
+        278
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9248046875
+    },
+    {
+      "pack_index": 280,
+      "card_box": [
+        0,
+        0,
+        455,
+        203
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.92431640625
+    },
+    {
+      "pack_index": 281,
+      "card_box": [
+        202,
+        128,
+        635,
+        464
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.92333984375
+    },
+    {
+      "pack_index": 282,
+      "card_box": [
+        0,
+        0,
+        334,
+        209
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.92333984375
+    },
+    {
+      "pack_index": 283,
+      "card_box": [
+        171,
+        0,
+        524,
+        267
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.92333984375
+    },
+    {
+      "pack_index": 284,
+      "card_box": [
+        242,
+        0,
+        642,
+        182
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.921875
+    },
+    {
+      "pack_index": 285,
+      "card_box": [
+        0,
+        0,
+        285,
+        209
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.921875
+    },
+    {
+      "pack_index": 286,
+      "card_box": [
+        383,
+        0,
+        591,
+        181
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9208984375
+    },
+    {
+      "pack_index": 287,
+      "card_box": [
+        0,
+        0,
+        153,
+        207
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.919921875
+    },
+    {
+      "pack_index": 288,
+      "card_box": [
+        0,
+        0,
+        179,
+        208
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.91845703125
+    },
+    {
+      "pack_index": 289,
+      "card_box": [
+        183,
+        105,
+        335,
+        271
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.91845703125
+    },
+    {
+      "pack_index": 290,
+      "card_box": [
+        0,
+        0,
+        218,
+        210
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.91748046875
+    },
+    {
+      "pack_index": 291,
+      "card_box": [
+        354,
+        0,
+        566,
+        184
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.91748046875
+    },
+    {
+      "pack_index": 292,
+      "card_box": [
+        160,
+        0,
+        538,
+        184
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.91259765625
+    },
+    {
+      "pack_index": 293,
+      "card_box": [
+        0,
+        59,
+        121,
+        244
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.90771484375
+    },
+    {
+      "pack_index": 294,
+      "card_box": [
+        249,
+        0,
+        558,
+        272
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9052734375
+    },
+    {
+      "pack_index": 295,
+      "card_box": [
+        349,
+        24,
+        610,
+        347
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.90380859375
+    },
+    {
+      "pack_index": 296,
+      "card_box": [
+        237,
+        0,
+        549,
+        214
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.90283203125
+    },
+    {
+      "pack_index": 297,
+      "card_box": [
+        0,
+        18,
+        197,
+        348
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9013671875
+    },
+    {
+      "pack_index": 298,
+      "card_box": [
+        126,
+        144,
+        366,
+        272
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9013671875
+    },
+    {
+      "pack_index": 299,
+      "card_box": [
+        320,
+        0,
+        516,
+        6
+      ],
+      "battery_count": 300,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9013671875
+    }
+  ]
+}
