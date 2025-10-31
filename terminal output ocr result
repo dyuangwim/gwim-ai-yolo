@@ -1,4 +1,5 @@
-python3 /home/pi/battery_batch/detect_batch.py \
+pi@raspberrypi:~ $ source ~/ai-env/bin/activate
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/detect_batch.py \
   --card_weights /home/pi/models/card_ncnn \
   --bat_weights  /home/pi/models/battery_ncnn \
   --img /home/pi/batch_images/sample_10packs.jpg \
@@ -7,3 +8,25 @@ python3 /home/pi/battery_batch/detect_batch.py \
   --out_dir /home/pi/batch_out \
   --card_imgsz 640 --bat_imgsz 416 \
   --card_conf 0.35 --bat_conf 0.35
+WARNING ⚠️ Unable to automatically guess model task, assuming 'task=detect'. Explicitly define task for your model, i.e. 'task=detect', 'segment', 'classify','pose' or 'obb'.
+Traceback (most recent call last):
+  File "/home/pi/battery_batch/detect_batch.py", line 156, in <module>
+    main()
+  File "/home/pi/battery_batch/detect_batch.py", line 105, in main
+    card_det = CardDetector(args.card_weights, imgsz=args.card_imgsz, conf=args.card_conf, threads=args.threads)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pi/battery_batch/card_detector.py", line 15, in __init__
+    _ = self.model.predict(
+        ^^^^^^^^^^^^^^^^^^^
+  File "/home/pi/ai-env/lib/python3.11/site-packages/ultralytics/engine/model.py", line 550, in predict
+    self.predictor.setup_model(model=self.model, verbose=is_cli)
+  File "/home/pi/ai-env/lib/python3.11/site-packages/ultralytics/engine/predictor.py", line 397, in setup_model
+    self.model = AutoBackend(
+                 ^^^^^^^^^^^^
+  File "/home/pi/ai-env/lib/python3.11/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pi/ai-env/lib/python3.11/site-packages/ultralytics/nn/autobackend.py", line 576, in __init__
+    raise TypeError(
+TypeError: model='/home/pi/models/card_ncnn' is not a supported model format. Ultralytics supports: ('PyTorch', 'TorchScript', 'ONNX', 'OpenVINO', 'TensorRT', 'CoreML', 'TensorFlow SavedModel', 'TensorFlow GraphDef', 'TensorFlow Lite', 'TensorFlow Edge TPU', 'TensorFlow.js', 'PaddlePaddle', 'MNN', 'NCNN', 'IMX', 'RKNN')
+See https://docs.ultralytics.com/modes/predict for help.
