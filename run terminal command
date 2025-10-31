@@ -30,3 +30,15 @@ python3 /home/pi/battery_batch/detect_batch.py \
   --bat_weights  /home/pi/models/battery_ncnn_model \
   --img /home/pi/batch_images/sample_10packs.jpg \
   --expected 2 --rotate 90 --out_dir /home/pi/batch_out
+
+
+
+
+
+# 1) 目录改名后
+python - <<'PY'
+from ultralytics import YOLO
+YOLO("/home/pi/models/card_ncnn_model", task="detect")
+YOLO("/home/pi/models/battery_ncnn_model", task="detect")
+print("BOTH LOADED OK")
+PY
