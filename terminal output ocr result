@@ -1,29 +1,12 @@
-(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/detect_batch.py   --card_weights /home/pi/models/card_ncnn_model   --bat_weights  /home/pi/models/battery_ncnn_model   --img /home/pi/batch_images/sample_10packs.jpg   --expected 2 --rotate 90 --out_dir /home/pi/batch_out
-Traceback (most recent call last):
-  File "/home/pi/battery_batch/detect_batch.py", line 156, in <module>
-    main()
-  File "/home/pi/battery_batch/detect_batch.py", line 105, in main
-    card_det = CardDetector(args.card_weights, imgsz=args.card_imgsz, conf=args.card_conf, threads=args.threads)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/pi/battery_batch/card_detector.py", line 23, in __init__
-    _ = self.model.predict(
-        ^^^^^^^^^^^^^^^^^^^
-  File "/home/pi/ai-env/lib/python3.11/site-packages/ultralytics/engine/model.py", line 550, in predict
-    self.predictor.setup_model(model=self.model, verbose=is_cli)
-  File "/home/pi/ai-env/lib/python3.11/site-packages/ultralytics/engine/predictor.py", line 397, in setup_model
-    self.model = AutoBackend(
-                 ^^^^^^^^^^^^
-  File "/home/pi/ai-env/lib/python3.11/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/home/pi/ai-env/lib/python3.11/site-packages/ultralytics/nn/autobackend.py", line 576, in __init__
-    raise TypeError(
-TypeError: model='/home/pi/models/card_ncnn_model/model.ncnn.param' is not a supported model format. Ultralytics supports: ('PyTorch', 'TorchScript', 'ONNX', 'OpenVINO', 'TensorRT', 'CoreML', 'TensorFlow SavedModel', 'TensorFlow GraphDef', 'TensorFlow Lite', 'TensorFlow Edge TPU', 'TensorFlow.js', 'PaddlePaddle', 'MNN', 'NCNN', 'IMX', 'RKNN')
-See https://docs.ultralytics.com/modes/predict for help.
-(ai-env) pi@raspberrypi:~ $ python - <<'PY'
-from ultralytics import YOLO
-YOLO("/home/pi/models/card_ncnn_model", task="detect")
-YOLO("/home/pi/models/battery_ncnn_model", task="detect")
-print("BOTH LOADED OK")
-PY
-BOTH LOADED OK
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/detect_batch.py \
+  --card_weights /home/pi/models/card_ncnn_model \
+  --bat_weights  /home/pi/models/battery_ncnn_model \
+  --img /home/pi/batch_images/sample_10packs.jpg \
+  --expected 2 --rotate 90 --out_dir /home/pi/batch_out
+Loading /home/pi/models/card_ncnn_model for NCNN inference...
+Loading /home/pi/models/battery_ncnn_model for NCNN inference...
+
+Done. Cards: 300 | NG: 300 | Time: 51934.1 ms
+Image: /home/pi/batch_out/batch_20251031_150917.jpg
+JSON:  /home/pi/batch_out/batch_20251031_150917.json
+CSV:   /home/pi/batch_out/batch_20251031_150917.csv
