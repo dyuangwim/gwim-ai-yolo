@@ -20,3 +20,10 @@ Traceback (most recent call last):
     raise TypeError(
 TypeError: model='/home/pi/models/card_ncnn_model/model.ncnn.param' is not a supported model format. Ultralytics supports: ('PyTorch', 'TorchScript', 'ONNX', 'OpenVINO', 'TensorRT', 'CoreML', 'TensorFlow SavedModel', 'TensorFlow GraphDef', 'TensorFlow Lite', 'TensorFlow Edge TPU', 'TensorFlow.js', 'PaddlePaddle', 'MNN', 'NCNN', 'IMX', 'RKNN')
 See https://docs.ultralytics.com/modes/predict for help.
+(ai-env) pi@raspberrypi:~ $ python - <<'PY'
+from ultralytics import YOLO
+YOLO("/home/pi/models/card_ncnn_model", task="detect")
+YOLO("/home/pi/models/battery_ncnn_model", task="detect")
+print("BOTH LOADED OK")
+PY
+BOTH LOADED OK
