@@ -1,13 +1,22 @@
-# battery_detector.py
 import os, cv2, numpy as np
 from ultralytics import YOLO
+
+def _resolve_weights(p:str)->str:
+    if os.path.isdir(p):
+        for name in ("model.ncnn.param","best.ncnn.param"):
+            cand = os.path.join(p, name)
+            if os.path.exists(cand):
+                return cand
+    return p
 
 class BatteryDetector:
     def __init__(self, weights:str, imgsz:int=416, conf:float=0.35, threads:int=4):
         os.environ.setdefault("OMP_NUM_THREADS", str(threads))
         os.environ.setdefault("NCNN_THREADS", str(threads))
         os.environ.setdefault("NCNN_VERBOSE", "0")
-        self.model = YOLO(weights)
+
+        weights = _resolve_weights(weights)
+        self.model = YOLO(weights, task="detect")
         self.imgsz = int(imgsz)
         self.conf = float(conf)
 
@@ -17,11 +26,7 @@ class BatteryDetector:
         )
 
     def detect(self, bgr_roi):
-        """对卡纸 ROI 检测电池，返回电池框列表（局部坐标系）。"""
-        r = self.model.predict(
-            source=bgr_roi, imgsz=self.imgsz, conf=self.conf,
-            verbose=False
-        )[0]
+        r = self.model.predict(source=bgr_roi, imgsz=self.imgsz, conf=self.conf, verbose=False)[0]
         out=[]
         if r.boxes is not None and len(r.boxes)>0:
             for b in r.boxes:
