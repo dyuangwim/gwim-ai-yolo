@@ -1,13 +1,57 @@
-(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/detect_batch.py   --card_weights /home/pi/models/card_ncnn   --bat_weights  /home/pi/models/battery_ncnn   --img /home/pi/batch_images/sample_10packs.jpg   --expected 2   --rotate 90   --out_dir /home/pi/batch_out   --card_imgsz 640 --bat_imgsz 416   --card_conf 0.35 --bat_conf 0.35
+(ai-env) pi@raspberrypi:~ $ ls -lh /home/pi/models/card_ncnn
+total 5.1M
+-rw------- 1 pi pi  358 Oct 21 03:59 metadata.yaml
+-rw------- 1 pi pi 5.0M Oct 21 03:59 model.ncnn.bin
+-rw------- 1 pi pi  23K Oct 21 03:59 model.ncnn.param
+-rw------- 1 pi pi  819 Oct 21 03:59 model_ncnn.py
+(ai-env) pi@raspberrypi:~ $ ls -lh /home/pi/models/battery_ncnn
+total 5.1M
+-rw------- 1 pi pi  358 Oct 17 06:10 metadata.yaml
+-rw------- 1 pi pi 5.0M Oct 17 06:10 model.ncnn.bin
+-rw------- 1 pi pi  24K Oct 17 06:10 model.ncnn.param
+-rw------- 1 pi pi  825 Oct 17 06:10 model_ncnn.py
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_ai/run_async.py \
+  --weights /home/pi/battery_ai/best_ncnn_model \
+  --imgsz 320 --conf 0.35 \
+  --ocr --ocr_every 2 --ocr_budget -1 \
+  --ocr_pad 0.10 --center_shrink 0.20 --ocr_lock_conf 0.50 \
+  --expected_model CR2025 \
+  --no_tess --max_vars 4 \
+  --roi_dir /home/pi/ocr_dump/roi --pre_dir /home/pi/ocr_dump/pre \
+  --dump_rate 8 --max_dump_per_frame 8 \
+  --blur_thr 45 --glare_thr 0.24 \
+  --preview
+[1:18:24.468167407] [3126]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+[1:18:24.475288147] [3132]  INFO RPI pisp.cpp:720 libpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[1:18:24.477792615] [3132]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx296.json
+[1:18:24.484686467] [3132]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a' for pipeline handler rpi/pisp
+[1:18:24.484726096] [3132]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a to CFE device /dev/media1 and ISP device /dev/media0 using PiSP variant BCM2712_D0
+[1:18:24.487719432] [3126]  INFO Camera camera.cpp:1215 configuring streams: (0) 1280x960-YUV420/sYCC (1) 1456x1088-BGGR_PISP_COMP1/RAW
+[1:18:24.487818635] [3132]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a - Selected sensor format: 1456x1088-SBGGR10_1X10/RAW - Selected CFE format: 1456x1088-PC1B/RAW
+WARNING ⚠️ Unable to automatically guess model task, assuming 'task=detect'. Explicitly define task for your model, i.e. 'task=detect', 'segment', 'classify','pose' or 'obb'.
+Loading /home/pi/battery_ai/best_ncnn_model for NCNN inference...
+✅ OCR worker started
+^C
+Frames:131 | Time:10.1s | FPS:13.0
+Bye.
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_ai/run_async.py   --weights /home/pi/models/battery_ncnn --imgsz 320 --conf 0.35   --ocr --ocr_every 2 --ocr_budget -1   --ocr_pad 0.10 --center_shrink 0.20 --ocr_lock_conf 0.50   --expected_model CR2025   --no_tess --max_vars 4   --roi_dir /home/pi/ocr_dump/roi --pre_dir /home/pi/ocr_dump/pre   --dump_rate 8 --max_dump_per_frame 8   --blur_thr 45 --glare_thr 0.24   --preview
+[1:20:01.199936289] [3224]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+[1:20:01.207160175] [3230]  INFO RPI pisp.cpp:720 libpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[1:20:01.209770661] [3230]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx296.json
+[1:20:01.217011232] [3230]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a' for pipeline handler rpi/pisp
+[1:20:01.217084250] [3230]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a to CFE device /dev/media1 and ISP device /dev/media0 using PiSP variant BCM2712_D0
+[1:20:01.220799211] [3224]  INFO Camera camera.cpp:1215 configuring streams: (0) 1280x960-YUV420/sYCC (1) 1456x1088-BGGR_PISP_COMP1/RAW
+[1:20:01.220953599] [3230]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a - Selected sensor format: 1456x1088-SBGGR10_1X10/RAW - Selected CFE format: 1456x1088-PC1B/RAW
+WARNING ⚠️ Unable to automatically guess model task, assuming 'task=detect'. Explicitly define task for your model, i.e. 'task=detect', 'segment', 'classify','pose' or 'obb'.
 Traceback (most recent call last):
-  File "/home/pi/battery_batch/detect_batch.py", line 156, in <module>
+  File "/home/pi/battery_ai/run_async.py", line 289, in <module>
     main()
-  File "/home/pi/battery_batch/detect_batch.py", line 105, in main
-    card_det = CardDetector(args.card_weights, imgsz=args.card_imgsz, conf=args.card_conf, threads=args.threads)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/pi/battery_batch/card_detector.py", line 23, in __init__
-    _ = self.model.predict(
-        ^^^^^^^^^^^^^^^^^^^
+  File "/home/pi/battery_ai/run_async.py", line 92, in main
+    det = YoloDetector(weights=args.weights, imgsz=args.imgsz, conf=args.conf,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/pi/battery_ai/yolo_detector.py", line 28, in __init__
+    _ = self.model.predict(source=np.zeros((self.imgsz, self.imgsz, 3), np.uint8),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/pi/ai-env/lib/python3.11/site-packages/ultralytics/engine/model.py", line 550, in predict
     self.predictor.setup_model(model=self.model, verbose=is_cli)
   File "/home/pi/ai-env/lib/python3.11/site-packages/ultralytics/engine/predictor.py", line 397, in setup_model
@@ -18,5 +62,19 @@ Traceback (most recent call last):
            ^^^^^^^^^^^^^^^^^^^^^
   File "/home/pi/ai-env/lib/python3.11/site-packages/ultralytics/nn/autobackend.py", line 576, in __init__
     raise TypeError(
-TypeError: model='/home/pi/models/card_ncnn/model.ncnn.param' is not a supported model format. Ultralytics supports: ('PyTorch', 'TorchScript', 'ONNX', 'OpenVINO', 'TensorRT', 'CoreML', 'TensorFlow SavedModel', 'TensorFlow GraphDef', 'TensorFlow Lite', 'TensorFlow Edge TPU', 'TensorFlow.js', 'PaddlePaddle', 'MNN', 'NCNN', 'IMX', 'RKNN')
+TypeError: model='/home/pi/models/battery_ncnn' is not a supported model format. Ultralytics supports: ('PyTorch', 'TorchScript', 'ONNX', 'OpenVINO', 'TensorRT', 'CoreML', 'TensorFlow SavedModel', 'TensorFlow GraphDef', 'TensorFlow Lite', 'TensorFlow Edge TPU', 'TensorFlow.js', 'PaddlePaddle', 'MNN', 'NCNN', 'IMX', 'RKNN')
 See https://docs.ultralytics.com/modes/predict for help.
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_ai/run_async.py   --weights /home/pi/models/best_ncnn_model --imgsz 320 --conf 0.35   --ocr --ocr_every 2 --ocr_budget -1   --ocr_pad 0.10 --center_shrink 0.20 --ocr_lock_conf 0.50   --expected_model CR2025   --no_tess --max_vars 4   --roi_dir /home/pi/ocr_dump/roi --pre_dir /home/pi/ocr_dump/pre   --dump_rate 8 --max_dump_per_frame 8   --blur_thr 45 --glare_thr 0.24   --preview
+[1:21:33.695336019] [3246]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+[1:21:33.702472293] [3252]  INFO RPI pisp.cpp:720 libpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[1:21:33.705026927] [3252]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx296.json
+[1:21:33.712138795] [3252]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a' for pipeline handler rpi/pisp
+[1:21:33.712180961] [3252]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a to CFE device /dev/media1 and ISP device /dev/media0 using PiSP variant BCM2712_D0
+[1:21:33.714930631] [3246]  INFO Camera camera.cpp:1215 configuring streams: (0) 1280x960-YUV420/sYCC (1) 1456x1088-BGGR_PISP_COMP1/RAW
+[1:21:33.715066352] [3252]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a - Selected sensor format: 1456x1088-SBGGR10_1X10/RAW - Selected CFE format: 1456x1088-PC1B/RAW
+WARNING ⚠️ Unable to automatically guess model task, assuming 'task=detect'. Explicitly define task for your model, i.e. 'task=detect', 'segment', 'classify','pose' or 'obb'.
+Loading /home/pi/models/best_ncnn_model for NCNN inference...
+✅ OCR worker started
+^C
+Frames:2111 | Time:94.1s | FPS:22.4
+Bye.
