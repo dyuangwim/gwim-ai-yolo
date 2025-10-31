@@ -1,13 +1,32 @@
 import os, cv2, numpy as np
 from ultralytics import YOLO
 
-def _resolve_weights(p:str)->str:
-    if os.path.isdir(p):
-        for name in ("model.ncnn.param","best.ncnn.param"):
-            cand = os.path.join(p, name)
-            if os.path.exists(cand):
-                return cand
-    return p
+def _load_ncnn(weights_path:str):
+    last_err = None
+    if os.path.isdir(weights_path):
+        try:
+            return YOLO(weights_path, task="detect")
+        except Exception as e:
+            last_err = e
+            for name in ("model.ncnn.param", "best.ncnn.param"):
+                p = os.path.join(weights_path, name)
+                if os.path.exists(p):
+                    try:
+                        return YOLO(p, task="detect")
+                    except Exception as e2:
+                        last_err = e2
+    else:
+        try:
+            return YOLO(weights_path, task="detect")
+        except Exception as e:
+            last_err = e
+            d = os.path.dirname(weights_path)
+            if os.path.isdir(d):
+                try:
+                    return YOLO(d, task="detect")
+                except Exception as e2:
+                    last_err = e2
+    raise last_err
 
 class BatteryDetector:
     def __init__(self, weights:str, imgsz:int=416, conf:float=0.35, threads:int=4):
@@ -15,8 +34,7 @@ class BatteryDetector:
         os.environ.setdefault("NCNN_THREADS", str(threads))
         os.environ.setdefault("NCNN_VERBOSE", "0")
 
-        weights = _resolve_weights(weights)
-        self.model = YOLO(weights, task="detect")
+        self.model = _load_ncnn(weights)
         self.imgsz = int(imgsz)
         self.conf = float(conf)
 
