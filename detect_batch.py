@@ -141,7 +141,7 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector, expected:
         x2 = min(W-1, x2 + margin); y2 = min(H-1, y2 + margin)
         roi = bgr[y1:y2, x1:x2]
 
-                bats = bat_det.detect(roi)
+        bats = bat_det.detect(roi)
 
         # 1) 简单电池过滤：太小的假框丢掉
         bb=[]
@@ -264,6 +264,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
