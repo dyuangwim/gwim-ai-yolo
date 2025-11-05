@@ -1,7 +1,6 @@
 import os, cv2, numpy as np
 from ultralytics import YOLO
 
-# ---- 简单 NMS (numpy) ----
 def nms_numpy(boxes, scores, iou_thr=0.55, topk=50):
     if len(boxes) == 0:
         return np.array([], dtype=int)
@@ -25,32 +24,16 @@ def nms_numpy(boxes, scores, iou_thr=0.55, topk=50):
     return np.asarray(keep, dtype=int)
 
 def _load_ncnn(weights_path:str):
-    last_err = None
-    # 目录优先
     if os.path.isdir(weights_path):
-        try:
-            return YOLO(weights_path, task="detect")
-        except Exception as e:
-            last_err = e
-            for name in ("model.ncnn.param", "best.ncnn.param"):
-                p = os.path.join(weights_path, name)
-                if os.path.exists(p):
-                    try:
-                        return YOLO(p, task="detect")
-                    except Exception as e2:
-                        last_err = e2
+        for name in ("model.ncnn.param", "best.ncnn.param", None):
+            p = os.path.join(weights_path, name) if name else weights_path
+            try:
+                return YOLO(p, task="detect")
+            except Exception:
+                continue
     else:
-        try:
-            return YOLO(weights_path, task="detect")
-        except Exception as e:
-            last_err = e
-            d = os.path.dirname(weights_path)
-            if os.path.isdir(d):
-                try:
-                    return YOLO(d, task="detect")
-                except Exception as e2:
-                    last_err = e2
-    raise last_err
+        return YOLO(weights_path, task="detect")
+    raise RuntimeError("无法加载 NCNN 模型")
 
 class CardDetector:
     def __init__(self, weights:str, imgsz:int=640, conf:float=0.50, threads:int=4):
@@ -60,7 +43,6 @@ class CardDetector:
         self.model = _load_ncnn(weights)
         self.imgsz = int(imgsz)
         self.conf = float(conf)
-        # 预热
         _ = self.model.predict(
             source=np.zeros((self.imgsz, self.imgsz, 3), np.uint8),
             imgsz=self.imgsz, conf=self.conf, verbose=False
@@ -75,13 +57,8 @@ class CardDetector:
         if r.boxes is not None and len(r.boxes)>0:
             boxes = r.boxes.xyxy.cpu().numpy()
             confs = (r.boxes.conf if r.boxes.conf is not None else np.zeros((len(boxes),1))).cpu().numpy().reshape(-1)
-
-            # 若数量异常大（>100）判定为模型未带NMS → 本地NMS
-            if len(boxes) > 100:
-                keep = nms_numpy(boxes, confs, iou_thr=0.55, topk=20)
-            else:
-                keep = np.argsort(-confs)[:20]
-
+            # 永远做一次 NMS（而不是 >100）
+            keep = nms_numpy(boxes, confs, iou_thr=0.55, topk=20)
             for i in keep:
                 x1,y1,x2,y2 = map(int, boxes[i].tolist())
                 c = float(confs[i])
