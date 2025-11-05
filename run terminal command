@@ -37,6 +37,7 @@ python3 /home/pi/battery_batch/detect_batch.py \
 
 
 
+
 # 1) 目录改名后
 python - <<'PY'
 from ultralytics import YOLO
