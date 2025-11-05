@@ -81,6 +81,50 @@ def filter_cards(cards, img_w, img_h, min_w=100, min_h=80):
     keep_idx = nms_numpy_local(boxes, scores, iou_thr=0.5, topk=32)
     return [{"xyxy": boxes[i], "conf": scores[i]} for i in keep_idx]
 
+def dedup_batteries(bats, expected:int):
+    """
+    在一个 ROI 内，把同一颗电池的重复框（中心点很接近）合并掉，
+    最多保留 expected 个电池。
+    """
+    if len(bats) <= expected:
+        return bats
+
+    # 1. 按置信度从高到低
+    cand = sorted(bats, key=lambda x: x["conf"], reverse=True)
+
+    selected = []
+    centers = []
+
+    for b in cand:
+        if len(selected) >= expected:
+            break
+
+        bx1,by1,bx2,by2 = b["xyxy"]
+        cx = (bx1 + bx2) / 2.0
+        cy = (by1 + by2) / 2.0
+        w  = bx2 - bx1
+        h  = by2 - by1
+        # 用当前框的尺寸估一个半径，中心距离小于这个比例就视为同一颗电池
+        radius = min(w, h) * 0.6
+
+        too_close = False
+        for (scx, scy, sr) in centers:
+            dx = cx - scx
+            dy = cy - scy
+            dist = (dx*dx + dy*dy) ** 0.5
+            # 如果两个中心很接近，就认为这是同一颗电池的重复框
+            if dist < min(radius, sr):
+                too_close = True
+                break
+
+        if not too_close:
+            selected.append(b)
+            centers.append((cx, cy, radius))
+
+    # 如果某些情况下一直没凑够 expected（例如模型漏检），就返回目前有的数量
+    return selected
+
+
 # -------------------------------------------------------
 
 def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector, expected:int, margin:int=6):
@@ -97,20 +141,24 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector, expected:
         x2 = min(W-1, x2 + margin); y2 = min(H-1, y2 + margin)
         roi = bgr[y1:y2, x1:x2]
 
-        bats = bat_det.detect(roi)
+                bats = bat_det.detect(roi)
 
-        # 简单电池过滤：太小的假框丢掉
+        # 1) 简单电池过滤：太小的假框丢掉
         bb=[]
         for b in bats:
             bx1,by1,bx2,by2 = b["xyxy"]
             bw,bh = bx2-bx1, by2-by1
             if bw>=28 and bh>=28:
                 bb.append(b)
-        # 最多保留 expected*2 个电池候选
-        bb = sorted(bb, key=lambda x: x["conf"], reverse=True)[:max(2, expected*2)]
-        bats = bb
+
+        # 2) 先保留一个上限（避免极端情况下太多框）
+        bb = sorted(bb, key=lambda x: x["conf"], reverse=True)[:max(4, expected*4)]
+
+        # 3) 对同一颗电池的重复框做“去重”，最多保留 expected 个
+        bats = dedup_batteries(bb, expected)
 
         cnt = len(bats)
+
         ok = (cnt == expected)
         color = (0,255,0) if ok else (0,0,255)
 
@@ -216,5 +264,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
