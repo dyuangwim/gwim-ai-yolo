@@ -4,6 +4,7 @@ from datetime import datetime
 from card_detector import CardDetector
 from battery_detector import BatteryDetector
 from utils_hw import Trigger, Buzzer
+import numpy as np
 
 def ensure_dir(p): os.makedirs(p, exist_ok=True)
 
@@ -34,10 +35,78 @@ def capture_from_camera(width=1920, height=1080):
     picam2.stop(); picam2.close()
     return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
 
+# ---------- 这里开始是新增的 NMS 和卡片过滤 ----------
+
+def nms_numpy(boxes, scores, iou_thr=0.55, topk=50):
+    """简单 NMS，boxes: Nx4, scores: N"""
+    if len(boxes) == 0:
+        return []
+    boxes = np.asarray(boxes, dtype=float)
+    scores = np.asarray(scores, dtype=float)
+    x1,y1,x2,y2 = boxes[:,0],boxes[:,1],boxes[:,2],boxes[:,3]
+    areas = np.maximum(0, x2-x1) * np.maximum(0, y2-y1)
+    order = scores.argsort()[::-1]
+    keep=[]
+    while order.size>0 and len(keep)<topk:
+        i=order[0]
+        keep.append(int(i))
+        xx1=np.maximum(x1[i], x1[order[1:]])
+        yy1=np.maximum(y1[i], y1[order[1:]])
+        xx2=np.minimum(x2[i], x2[order[1:]])
+        yy2=np.minimum(y2[i], y2[order[1:]])
+        w=np.maximum(0.0, xx2-xx1)
+        h=np.maximum(0.0, yy2-yy1)
+        inter=w*h
+        ovr= inter / (areas[i] + areas[order[1:]] - inter + 1e-6)
+        inds=np.where(ovr<=iou_thr)[0]
+        order=order[inds+1]
+    return keep
+
+def filter_cards(cards, img_w, img_h, min_w=180, min_h=220):
+    """
+    二次过滤 card 检测结果：
+    - 去掉特别扁/特别小的框（比如高度只有 6 像素的顶部噪声）
+    - 再做一次 NMS，最多保留 32 个
+    """
+    boxes=[]; scores=[]
+    for c in cards:
+        x1,y1,x2,y2 = c["xyxy"]
+        w,h = x2-x1, y2-y1
+
+        # 几何过滤：真实卡片在你的图里大概 150x250 左右，6px 高的全过滤掉
+        if w < min_w or h < min_h:
+            continue
+        if x1 < 0 or y1 < 0 or x2 > img_w or y2 > img_h:
+            continue
+
+        boxes.append([x1,y1,x2,y2])
+        scores.append(c.get("conf", 0.0))
+
+    if not boxes:
+        return []
+
+    # 因为 NCNN conf 可能都接近 1，这里主要靠 IoU 去重
+    keep = nms_numpy(boxes, scores, iou_thr=0.5, topk=32)
+
+    out=[]
+    for i in keep:
+        out.append({
+            "xyxy": (int(boxes[i][0]),int(boxes[i][1]),int(boxes[i][2]),int(boxes[i][3])),
+            "conf": float(scores[i])
+        })
+    return out
+
+# -------------------------------------------------------
+
 def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector, expected:int, margin:int=6):
     """返回汇总数据与可视化渲染后的图像。"""
     H,W = bgr.shape[:2]
-    cards = card_det.detect(bgr)
+
+    # 先跑 card 模型
+    cards_raw = card_det.detect(bgr)
+    # 再做几何过滤 + NMS，只保留像样的卡片框
+    cards = filter_cards(cards_raw, W, H, min_w=180, min_h=220)
+
     vis = bgr.copy()
     report = []
     idx = 0
@@ -47,7 +116,20 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector, expected:
         x1 = max(0, x1 - margin); y1 = max(0, y1 - margin)
         x2 = min(W-1, x2 + margin); y2 = min(H-1, y2 + margin)
         roi = bgr[y1:y2, x1:x2]
+
         bats = bat_det.detect(roi)
+
+        # 简单电池过滤：太小的假框丢掉
+        bb=[]
+        for b in bats:
+            bx1,by1,bx2,by2 = b["xyxy"]
+            bw,bh = bx2-bx1, by2-by1
+            if bw>=28 and bh>=28:
+                bb.append(b)
+        # 最多保留 expected*2 个电池候选
+        bb = sorted(bb, key=lambda x: x["conf"], reverse=True)[:max(2, expected*2)]
+        bats = bb
+
         cnt = len(bats)
         ok = (cnt == expected)
         color = (0,255,0) if ok else (0,0,255)
@@ -154,3 +236,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
