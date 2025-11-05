@@ -1,13 +1,18 @@
-(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/detect_batch.py \
-  --card_weights /home/pi/models/card_ncnn_model \
-  --bat_weights  /home/pi/models/battery_ncnn_model \
-  --img /home/pi/batch_images/sample_10packs.jpg \
-  --expected 2 --rotate 90 --out_dir /home/pi/batch_out_test \
-  --card_conf 0.50 --bat_conf 0.50
-Loading /home/pi/models/card_ncnn_model for NCNN inference...
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/detect_batch.py   --card_weights /home/pi/models/card.pt   --bat_weights  /home/pi/models/battery_ncnn_model   --img /home/pi/batch_images/sample_10packs.jpg   --expected 2 --rotate 0 --out_dir /home/pi/batch_out_pt   --card_conf 0.50 --bat_conf 0.50
 Loading /home/pi/models/battery_ncnn_model for NCNN inference...
 
-Done. Cards: 5 | NG: 5 | Time: 551.0 ms
-Image: /home/pi/batch_out_test/batch_20251105_134402.jpg
-JSON:  /home/pi/batch_out_test/batch_20251105_134402.json
-CSV:   /home/pi/batch_out_test/batch_20251105_134402.csv
+Done. Cards: 10 | NG: 10 | Time: 1115.3 ms
+Image: /home/pi/batch_out_pt/batch_20251105_135523.jpg
+JSON:  /home/pi/batch_out_pt/batch_20251105_135523.json
+CSV:   /home/pi/batch_out_pt/batch_20251105_135523.csv
+(ai-env) pi@raspberrypi:~ $ python3 - << 'PY'
+from ultralytics import YOLO
+import ultralytics
+print("ultralytics version:", ultralytics.__version__)
+
+model = YOLO("/home/pi/models/card_ncnn_model")
+print("model.model_type:", getattr(model, "model_type", "unknown"))
+PY
+ultralytics version: 8.3.206
+WARNING ⚠️ Unable to automatically guess model task, assuming 'task=detect'. Explicitly define task for your model, i.e. 'task=detect', 'segment', 'classify','pose' or 'obb'.
+model.model_type: unknown
