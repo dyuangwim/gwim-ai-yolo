@@ -88,32 +88,40 @@ def filter_cards(cards, img_w, img_h, min_w=100, min_h=80):
     return [{"xyxy": boxes[i], "conf": scores[i]} for i in keep_idx]
 
 
-def dedup_batteries(bats, expected:int):
-    """
-    把同一颗电池的重复框（中心点很接近）合并掉，最多保留 expected 个。
-    """
-    if len(bats) <= expected:
-        return bats
+# ---------- 只合并重复框，不再限制“最多 expected 个” ----------
 
+def dedup_batteries(bats, max_keep=None):
+    """
+    把同一颗电池的重复框（中心点很接近）合并掉。
+    - 不再用 expected，当作“数量上限”
+    - max_keep 只是一个安全上限（比如 8 / 16），防止极端情况下框太多
+    """
+    if not bats:
+        return []
+
+    # 按置信度从高到低
     cand = sorted(bats, key=lambda x: x["conf"], reverse=True)
+
     selected = []
     centers = []
 
     for b in cand:
-        if len(selected) >= expected:
+        if max_keep is not None and len(selected) >= max_keep:
             break
+
         bx1,by1,bx2,by2 = b["xyxy"]
         cx = (bx1 + bx2) / 2.0
         cy = (by1 + by2) / 2.0
         w  = bx2 - bx1
         h  = by2 - by1
-        radius = min(w, h) * 0.6
+        radius = min(w, h) * 0.6   # 同一颗电池的“半径”范围
 
         too_close = False
         for (scx, scy, sr) in centers:
             dx = cx - scx
             dy = cy - scy
             dist = (dx*dx + dy*dy) ** 0.5
+            # 如果两个中心距离很近，就认为是同一颗电池的重复框
             if dist < min(radius, sr):
                 too_close = True
                 break
@@ -135,7 +143,7 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector,
     cards_raw = card_det.detect(bgr)
     cards = filter_cards(cards_raw, W, H)
 
-    # 2) 整张图电池检测（用与你 Colab 相同的调用方式）
+    # 2) 整张图电池检测（和 Colab 一样的调用方式）
     bats_full = bat_det.detect_full(bgr)
 
     vis = bgr.copy()
@@ -166,20 +174,23 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector,
             if bw >= 28 and bh >= 28:
                 bb.append(b)
 
-        # C. 去掉同一颗电池的重复框，最多保留 expected 个
-        bats = dedup_batteries(bb, expected)
+        # C. 合并重复框，但不再限制最多 expected 个
+        #    给一个比较宽松的上限，比如 expected*4（2 粒卡最多 8 个候选）
+        bats = dedup_batteries(bb, max_keep=expected * 4 if expected > 0 else None)
         cnt = len(bats)
 
         ok = (cnt == expected)
         color = (0,255,0) if ok else (0,0,255)
 
         # 画卡片框
-        draw_box(vis, (x1, y1, x2, y2), f"pack#{idx} cnt={cnt}/{expected}", color, 3)
+        draw_box(vis, (x1, y1, x2, y2),
+                 f"pack#{idx} cnt={cnt}/{expected}", color, 3)
 
         # 画电池框（使用全图坐标）
         for b in bats:
             bx1, by1, bx2, by2 = b["xyxy"]
-            draw_box(vis, (bx1, by1, bx2, by2), None, color=(255,255,0), thick=2)
+            draw_box(vis, (bx1, by1, bx2, by2),
+                     None, color=(255,255,0), thick=2)
 
         report.append({
             "pack_index": idx,
@@ -206,9 +217,9 @@ def main():
     ap.add_argument("--rotate", type=int, default=0, choices=[0,90,180,270])
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--card_imgsz", type=int, default=640)
-    ap.add_argument("--bat_imgsz", type=int, default=640)   # 目前不再使用，只是为了兼容参数
+    ap.add_argument("--bat_imgsz", type=int, default=640)   # 为兼容保留
     ap.add_argument("--card_conf", type=float, default=0.50)
-    ap.add_argument("--bat_conf", type=float, default=None) # None=用模型默认 0.25
+    ap.add_argument("--bat_conf", type=float, default=None) # None=模型默认 0.25
     ap.add_argument("--out_dir", default="/home/pi/batch_out")
     ap.add_argument("--save_name", default="auto")
     ap.add_argument("--trigger_pin", type=int, default=None)
@@ -226,10 +237,8 @@ def main():
     trig = Trigger(pin=args.trigger_pin, active_high=True) if args.from_camera else None
     buz  = Buzzer(pin=args.buzzer_pin, active_high=True) if args.buzzer_pin is not None else None
 
-    # 卡片还是用你原来的 imgsz / conf
     card_det = CardDetector(args.card_weights, imgsz=args.card_imgsz,
                             conf=args.card_conf, threads=args.threads)
-    # 电池：使用新的 BatteryDetector（内部调用 model(bgr)）
     bat_det  = BatteryDetector(args.bat_weights,
                                imgsz=args.bat_imgsz,
                                conf=args.bat_conf,
@@ -247,7 +256,7 @@ def main():
         else:
             if args.fallback_wait > 0:
                 time.sleep(args.fallback_wait)
-        print("📸 拍照中…")
+            print("📸 拍照中…")
         bgr = capture_from_camera()
 
     if args.rotate:
