@@ -1,11 +1,6 @@
-(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/detect_batch.py \
+python3 /home/pi/battery_batch/detect_batch.py \
   --card_weights /home/pi/models/card.pt \
   --bat_weights  /home/pi/models/battery.pt \
   --img /home/pi/batch_images/sample_10packs.jpg \
   --expected 2 --rotate 0 --out_dir /home/pi/batch_out_pt \
-  --card_conf 0.50 --bat_conf 0.50
-
-Done. Cards: 10 | NG: 8 | Time: 383.5 ms
-Image: /home/pi/batch_out_pt/batch_20251107_140733.jpg
-JSON:  /home/pi/batch_out_pt/batch_20251107_140733.json
-CSV:   /home/pi/batch_out_pt/batch_20251107_140733.csv
+  --card_conf 0.50
