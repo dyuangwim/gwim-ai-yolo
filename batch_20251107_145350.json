@@ -1,0 +1,148 @@
+{
+  "latency_ms": 569.7982311248779,
+  "packs": [
+    {
+      "pack_index": 0,
+      "card_box": [
+        3112,
+        1472,
+        4200,
+        2592
+      ],
+      "battery_count": 2,
+      "expected": 2,
+      "ok": true,
+      "card_conf": 0.9407656788825989
+    },
+    {
+      "pack_index": 1,
+      "card_box": [
+        1891,
+        1542,
+        2431,
+        2518
+      ],
+      "battery_count": 0,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9338849782943726
+    },
+    {
+      "pack_index": 2,
+      "card_box": [
+        2921,
+        476,
+        3464,
+        1437
+      ],
+      "battery_count": 1,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9284572005271912
+    },
+    {
+      "pack_index": 3,
+      "card_box": [
+        2365,
+        494,
+        2894,
+        1508
+      ],
+      "battery_count": 2,
+      "expected": 2,
+      "ok": true,
+      "card_conf": 0.9284026622772217
+    },
+    {
+      "pack_index": 4,
+      "card_box": [
+        1766,
+        384,
+        2347,
+        1348
+      ],
+      "battery_count": 1,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9271751642227173
+    },
+    {
+      "pack_index": 5,
+      "card_box": [
+        3443,
+        352,
+        3978,
+        1387
+      ],
+      "battery_count": 2,
+      "expected": 2,
+      "ok": true,
+      "card_conf": 0.9238089323043823
+    },
+    {
+      "pack_index": 6,
+      "card_box": [
+        2374,
+        1554,
+        2915,
+        2591
+      ],
+      "battery_count": 0,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9223297834396362
+    },
+    {
+      "pack_index": 7,
+      "card_box": [
+        639,
+        147,
+        1729,
+        1348
+      ],
+      "battery_count": 0,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9196507334709167
+    },
+    {
+      "pack_index": 8,
+      "card_box": [
+        1363,
+        1426,
+        1873,
+        2380
+      ],
+      "battery_count": 1,
+      "expected": 2,
+      "ok": false,
+      "card_conf": 0.9173135757446289
+    },
+    {
+      "pack_index": 9,
+      "card_box": [
+        767,
+        1396,
+        1319,
+        2406
+      ],
+      "battery_count": 2,
+      "expected": 2,
+      "ok": true,
+      "card_conf": 0.9140015840530396
+    },
+    {
+      "pack_index": 10,
+      "card_box": [
+        3943,
+        343,
+        4476,
+        1399
+      ],
+      "battery_count": 2,
+      "expected": 2,
+      "ok": true,
+      "card_conf": 0.9050503969192505
+    }
+  ]
+}
