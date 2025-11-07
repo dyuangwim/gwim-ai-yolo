@@ -62,3 +62,10 @@ print("ultralytics version:", ultralytics.__version__)
 model = YOLO("/home/pi/models/card_ncnn_model")
 print("model.model_type:", getattr(model, "model_type", "unknown"))
 PY
+
+
+
+
+
+python3 /home/pi/battery_batch/test_battery_full.py
+
