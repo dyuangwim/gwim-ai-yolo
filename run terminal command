@@ -45,7 +45,7 @@ python3 /home/pi/battery_batch/detect_batch.py \
 python3 /home/pi/battery_batch/detect_batch.py \
   --card_weights /home/pi/models/card.pt \
   --bat_weights  /home/pi/models/battery.pt \
-  --img /home/pi/batch_images/sample_10packs.jpg \
+  --img /home/pi/batch_images/card_72.jpg \
   --expected 2 --rotate 0 --out_dir /home/pi/batch_out_pt \
   --card_conf 0.50
 
