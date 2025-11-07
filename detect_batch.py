@@ -1,10 +1,11 @@
 # detect_batch.py
 import os, cv2, json, time, csv, argparse
 from datetime import datetime
+import numpy as np
+
 from card_detector import CardDetector
 from battery_detector import BatteryDetector
 from utils_hw import Trigger, Buzzer
-import numpy as np
 
 def ensure_dir(p): os.makedirs(p, exist_ok=True)
 
@@ -18,8 +19,7 @@ def draw_box(img, box, label=None, color=(0,255,255), thick=2):
         cv2.putText(img, label, (x1+4, y0+th+3), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
 
 def auto_rotate_if_needed(bgr, rotate:int):
-    """rotate in degrees: 0/90/180/270"""
-    if rotate==0: return bgr
+    if rotate==0:   return bgr
     if rotate==90:  return cv2.rotate(bgr, cv2.ROTATE_90_CLOCKWISE)
     if rotate==180: return cv2.rotate(bgr, cv2.ROTATE_180)
     if rotate==270: return cv2.rotate(bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
@@ -35,14 +35,14 @@ def capture_from_camera(width=1920, height=1080):
     picam2.stop(); picam2.close()
     return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
 
-# ---------- 这里开始是新增的 NMS 和卡片过滤 ----------
+# ---------- NMS + 卡片过滤 ----------
 
 def nms_numpy_local(boxes, scores, iou_thr=0.5, topk=32):
-    """给卡片做一次轻量级 NMS（和 card_detector 里的版本类似，独立一份避免循环依赖）"""
     if len(boxes) == 0:
         return []
-    boxes = np.asarray(boxes, dtype=float)
+    boxes  = np.asarray(boxes, dtype=float)
     scores = np.asarray(scores, dtype=float)
+
     x1,y1,x2,y2 = boxes[:,0], boxes[:,1], boxes[:,2], boxes[:,3]
     areas = np.maximum(0, x2-x1) * np.maximum(0, y2-y1)
     order = scores.argsort()[::-1]
@@ -63,15 +63,12 @@ def nms_numpy_local(boxes, scores, iou_thr=0.5, topk=32):
     return keep
 
 def filter_cards(cards, img_w, img_h, min_w=100, min_h=80):
-    """去掉过小或扁的假框 + 二次NMS"""
     boxes=[]; scores=[]
     for c in cards:
         x1,y1,x2,y2 = c["xyxy"]
         w,h = x2-x1, y2-y1
-        # 1) 去掉高度很小的顶端条形框
         if w < min_w or h < min_h:
             continue
-        # 2) 一些越界框直接丢掉
         if x1 < 0 or y1 < 0 or x2 > img_w or y2 > img_h:
             continue
         boxes.append([x1,y1,x2,y2])
@@ -83,28 +80,23 @@ def filter_cards(cards, img_w, img_h, min_w=100, min_h=80):
 
 def dedup_batteries(bats, expected:int):
     """
-    在一个 ROI 内，把同一颗电池的重复框（中心点很接近）合并掉，
-    最多保留 expected 个电池。
+    把同一颗电池的重复框（中心点很接近）合并掉，最多保留 expected 个。
     """
     if len(bats) <= expected:
         return bats
 
-    # 1. 按置信度从高到低
     cand = sorted(bats, key=lambda x: x["conf"], reverse=True)
-
     selected = []
     centers = []
 
     for b in cand:
         if len(selected) >= expected:
             break
-
         bx1,by1,bx2,by2 = b["xyxy"]
         cx = (bx1 + bx2) / 2.0
         cy = (by1 + by2) / 2.0
         w  = bx2 - bx1
         h  = by2 - by1
-        # 用当前框的尺寸估一个半径，中心距离小于这个比例就视为同一颗电池
         radius = min(w, h) * 0.6
 
         too_close = False
@@ -112,7 +104,6 @@ def dedup_batteries(bats, expected:int):
             dx = cx - scx
             dy = cy - scy
             dist = (dx*dx + dy*dy) ** 0.5
-            # 如果两个中心很接近，就认为这是同一颗电池的重复框
             if dist < min(radius, sr):
                 too_close = True
                 break
@@ -121,25 +112,19 @@ def dedup_batteries(bats, expected:int):
             selected.append(b)
             centers.append((cx, cy, radius))
 
-    # 如果某些情况下一直没凑够 expected（例如模型漏检），就返回目前有的数量
     return selected
 
+# ---------- 核心：整图电池 + 卡片内分配 ----------
 
-# -------------------------------------------------------
-
-def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector, expected:int, margin:int=6):
-    """
-    1) 整张图跑一次 card YOLO
-    2) 整张图跑一次 battery YOLO
-    3) 按电池中心点落在哪个 card 里，分配计数
-    """
+def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector,
+                  expected:int, margin:int=6):
     H, W = bgr.shape[:2]
 
     # 1) 卡片检测 + 过滤
     cards_raw = card_det.detect(bgr)
-    cards = filter_cards(cards_raw, W, H)  # 用你原来的 filter_cards
+    cards = filter_cards(cards_raw, W, H)
 
-    # 2) 全图电池检测（坐标是全图的）
+    # 2) 整张图电池检测
     bats_full = bat_det.detect_full(bgr)
 
     vis = bgr.copy()
@@ -148,14 +133,12 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector, expected:
 
     for c in cards:
         x1, y1, x2, y2 = c["xyxy"]
-
-        # 稍微扩一点点，避免刚好切到电池边缘
         x1e = max(0, x1 - margin)
         y1e = max(0, y1 - margin)
-        x2e = min(W - 1, x2 + margin)
-        y2e = min(H - 1, y2 + margin)
+        x2e = min(W-1, x2 + margin)
+        y2e = min(H-1, y2 + margin)
 
-        # (1) 把中心点落在这个卡片里的电池挑出来
+        # A. 把中心点落在这个卡片里的电池挑出来
         cand = []
         for b in bats_full:
             bx1, by1, bx2, by2 = b["xyxy"]
@@ -164,7 +147,7 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector, expected:
             if (cx >= x1e) and (cx <= x2e) and (cy >= y1e) and (cy <= y2e):
                 cand.append(b)
 
-        # (2) 简单尺寸过滤：太小的假框丢掉
+        # B. 简单尺寸过滤：太小的假框丢掉
         bb = []
         for b in cand:
             bx1, by1, bx2, by2 = b["xyxy"]
@@ -172,24 +155,24 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector, expected:
             if bw >= 28 and bh >= 28:
                 bb.append(b)
 
-        # (3) 去掉同一颗电池的重复框，最多保留 expected 个
+        # C. 去掉同一颗电池的重复框，最多保留 expected 个
         bats = dedup_batteries(bb, expected)
-
         cnt = len(bats)
+
         ok = (cnt == expected)
         color = (0,255,0) if ok else (0,0,255)
 
-        # 画卡纸框
+        # 画卡片框
         draw_box(vis, (x1, y1, x2, y2), f"pack#{idx} cnt={cnt}/{expected}", color, 3)
 
-        # 画电池框（注意：这里直接用全图坐标）
+        # 画电池框（使用全图坐标）
         for b in bats:
             bx1, by1, bx2, by2 = b["xyxy"]
             draw_box(vis, (bx1, by1, bx2, by2), None, color=(255,255,0), thick=2)
 
         report.append({
             "pack_index": idx,
-            "card_box": [int(x1), int(y1), int(x2), int(y2)],
+            "card_box": [int(x1),int(y1),int(x2),int(y2)],
             "battery_count": cnt,
             "expected": expected,
             "ok": bool(ok),
@@ -199,24 +182,26 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector, expected:
 
     return report, vis
 
+# ---------- main ----------
+
 def main():
-    ap = argparse.ArgumentParser("Batch Card→Battery Counting (Pi5 + NCNN)")
-    ap.add_argument("--card_weights", default="/home/pi/models/card_ncnn", help="NCNN folder")
-    ap.add_argument("--bat_weights",  default="/home/pi/models/battery_ncnn", help="NCNN folder")
+    ap = argparse.ArgumentParser("Batch Card→Battery Counting (Pi5 + YOLO)")
+    ap.add_argument("--card_weights", default="/home/pi/models/card.pt")
+    ap.add_argument("--bat_weights",  default="/home/pi/models/battery.pt")  # 👈 改成 .pt
     ap.add_argument("--img", help="输入图片路径（有则直接处理）")
     ap.add_argument("--expected", type=int, required=True, help="每包应有的电池数量，如 1/2/4/8")
-    ap.add_argument("--rotate", type=int, default=0, choices=[0,90,180,270], help="按需旋转")
+    ap.add_argument("--rotate", type=int, default=0, choices=[0,90,180,270])
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--card_imgsz", type=int, default=640)
     ap.add_argument("--bat_imgsz", type=int, default=416)
-    ap.add_argument("--card_conf", type=float, default=0.35)
-    ap.add_argument("--bat_conf", type=float, default=0.35)
+    ap.add_argument("--card_conf", type=float, default=0.50)
+    ap.add_argument("--bat_conf", type=float, default=0.50)
     ap.add_argument("--out_dir", default="/home/pi/batch_out")
-    ap.add_argument("--save_name", default="auto")  # auto=按时间戳
-    ap.add_argument("--trigger_pin", type=int, default=None, help="GPIO 触发拍照（BCM 编号）")
-    ap.add_argument("--buzzer_pin", type=int, default=None, help="蜂鸣器 GPIO（BCM 编号）")
-    ap.add_argument("--fallback_wait", type=float, default=0.0, help="无传感器时等待秒数再拍")
-    ap.add_argument("--from_camera", action="store_true", help="从相机拍一张再分析")
+    ap.add_argument("--save_name", default="auto")
+    ap.add_argument("--trigger_pin", type=int, default=None)
+    ap.add_argument("--buzzer_pin", type=int, default=None)
+    ap.add_argument("--fallback_wait", type=float, default=0.0)
+    ap.add_argument("--from_camera", action="store_true")
     args = ap.parse_args()
 
     os.environ.setdefault("OMP_NUM_THREADS", str(args.threads))
@@ -225,25 +210,24 @@ def main():
 
     ensure_dir(args.out_dir)
 
-    # 硬件
     trig = Trigger(pin=args.trigger_pin, active_high=True) if args.from_camera else None
     buz  = Buzzer(pin=args.buzzer_pin, active_high=True) if args.buzzer_pin is not None else None
 
-    # 模型
-    card_det = CardDetector(args.card_weights, imgsz=args.card_imgsz, conf=args.card_conf, threads=args.threads)
-    bat_det  = BatteryDetector(args.bat_weights,  imgsz=args.bat_imgsz,  conf=args.bat_conf,  threads=args.threads)
+    card_det = CardDetector(args.card_weights, imgsz=args.card_imgsz,
+                            conf=args.card_conf, threads=args.threads)
+    bat_det  = BatteryDetector(args.bat_weights,  imgsz=args.bat_imgsz,
+                               conf=args.bat_conf,  threads=args.threads)
 
-    # 获取图像
     if args.img:
         bgr = cv2.imread(args.img)
-        if bgr is None: 
+        if bgr is None:
             raise RuntimeError(f"无法读取图像：{args.img}")
     else:
         if trig is not None:
             print("⏳ 等待触发信号…")
             trig.wait(fallback_seconds=args.fallback_wait)
         else:
-            if args.fallback_wait>0:
+            if args.fallback_wait > 0:
                 time.sleep(args.fallback_wait)
         print("📸 拍照中…")
         bgr = capture_from_camera()
@@ -253,11 +237,10 @@ def main():
 
     t0 = time.time()
     report, vis = analyze_batch(bgr, card_det, bat_det, expected=args.expected)
-    dt = (time.time() - t0)*1000.0
+    dt = (time.time() - t0) * 1000.0
 
-    # 保存输出
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base = (args.save_name if args.save_name!="auto" else f"batch_{ts}")
+    base = args.save_name if args.save_name != "auto" else f"batch_{ts}"
     img_out  = os.path.join(args.out_dir, f"{base}.jpg")
     json_out = os.path.join(args.out_dir, f"{base}.json")
     csv_out  = os.path.join(args.out_dir, f"{base}.csv")
@@ -267,12 +250,14 @@ def main():
         json.dump({"latency_ms": dt, "packs": report}, f, indent=2)
     with open(csv_out, "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["pack_index","x1","y1","x2","y2","battery_count","expected","ok","card_conf"])
+        w.writerow(["pack_index","x1","y1","x2","y2",
+                    "battery_count","expected","ok","card_conf"])
         for r in report:
             x1,y1,x2,y2 = r["card_box"]
-            w.writerow([r["pack_index"],x1,y1,x2,y2,r["battery_count"],r["expected"],int(r["ok"]),f'{r["card_conf"]:.3f}'])
+            w.writerow([r["pack_index"],x1,y1,x2,y2,
+                        r["battery_count"],r["expected"],int(r["ok"]),
+                        f'{r["card_conf"]:.3f}'])
 
-    # 统计/报警
     bad = [p for p in report if not p["ok"]]
     print(f"\nDone. Cards: {len(report)} | NG: {len(bad)} | Time: {dt:.1f} ms")
     print(f"Image: {img_out}\nJSON:  {json_out}\nCSV:   {csv_out}")
@@ -282,8 +267,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
