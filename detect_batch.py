@@ -128,57 +128,75 @@ def dedup_batteries(bats, expected:int):
 # -------------------------------------------------------
 
 def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector, expected:int, margin:int=6):
-    H,W = bgr.shape[:2]
+    """
+    1) 整张图跑一次 card YOLO
+    2) 整张图跑一次 battery YOLO
+    3) 按电池中心点落在哪个 card 里，分配计数
+    """
+    H, W = bgr.shape[:2]
+
+    # 1) 卡片检测 + 过滤
     cards_raw = card_det.detect(bgr)
-    cards = filter_cards(cards_raw, W, H)  # 🔴 用过滤后的卡片框
+    cards = filter_cards(cards_raw, W, H)  # 用你原来的 filter_cards
+
+    # 2) 全图电池检测（坐标是全图的）
+    bats_full = bat_det.detect_full(bgr)
+
     vis = bgr.copy()
     report = []
     idx = 0
+
     for c in cards:
-        x1,y1,x2,y2 = c["xyxy"]
-        # 轻微扩一点边，避免切掉圆壳
-        x1 = max(0, x1 - margin); y1 = max(0, y1 - margin)
-        x2 = min(W-1, x2 + margin); y2 = min(H-1, y2 + margin)
-        roi = bgr[y1:y2, x1:x2]
+        x1, y1, x2, y2 = c["xyxy"]
 
-        bats = bat_det.detect(roi)
+        # 稍微扩一点点，避免刚好切到电池边缘
+        x1e = max(0, x1 - margin)
+        y1e = max(0, y1 - margin)
+        x2e = min(W - 1, x2 + margin)
+        y2e = min(H - 1, y2 + margin)
 
-        # 1) 简单电池过滤：太小的假框丢掉
-        bb=[]
-        for b in bats:
-            bx1,by1,bx2,by2 = b["xyxy"]
-            bw,bh = bx2-bx1, by2-by1
-            if bw>=28 and bh>=28:
+        # (1) 把中心点落在这个卡片里的电池挑出来
+        cand = []
+        for b in bats_full:
+            bx1, by1, bx2, by2 = b["xyxy"]
+            cx = (bx1 + bx2) / 2.0
+            cy = (by1 + by2) / 2.0
+            if (cx >= x1e) and (cx <= x2e) and (cy >= y1e) and (cy <= y2e):
+                cand.append(b)
+
+        # (2) 简单尺寸过滤：太小的假框丢掉
+        bb = []
+        for b in cand:
+            bx1, by1, bx2, by2 = b["xyxy"]
+            bw, bh = bx2 - bx1, by2 - by1
+            if bw >= 28 and bh >= 28:
                 bb.append(b)
 
-        # 2) 先保留一个上限（避免极端情况下太多框）
-        bb = sorted(bb, key=lambda x: x["conf"], reverse=True)[:max(4, expected*4)]
-
-        # 3) 对同一颗电池的重复框做“去重”，最多保留 expected 个
+        # (3) 去掉同一颗电池的重复框，最多保留 expected 个
         bats = dedup_batteries(bb, expected)
 
         cnt = len(bats)
-
         ok = (cnt == expected)
         color = (0,255,0) if ok else (0,0,255)
 
         # 画卡纸框
-        draw_box(vis, (x1,y1,x2,y2), f"pack#{idx} cnt={cnt}/{expected}", color, 3)
+        draw_box(vis, (x1, y1, x2, y2), f"pack#{idx} cnt={cnt}/{expected}", color, 3)
 
-        # 画电池框（换算为全图坐标）
+        # 画电池框（注意：这里直接用全图坐标）
         for b in bats:
-            bx1,by1,bx2,by2 = b["xyxy"]
-            draw_box(vis, (x1+bx1, y1+by1, x1+bx2, y1+by2), None, color=(255,255,0), thick=2)
+            bx1, by1, bx2, by2 = b["xyxy"]
+            draw_box(vis, (bx1, by1, bx2, by2), None, color=(255,255,0), thick=2)
 
         report.append({
             "pack_index": idx,
-            "card_box": [int(x1),int(y1),int(x2),int(y2)],
+            "card_box": [int(x1), int(y1), int(x2), int(y2)],
             "battery_count": cnt,
             "expected": expected,
             "ok": bool(ok),
             "card_conf": float(c["conf"])
         })
         idx += 1
+
     return report, vis
 
 def main():
@@ -264,6 +282,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
