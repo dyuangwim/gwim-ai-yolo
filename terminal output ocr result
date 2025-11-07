@@ -1,18 +1,73 @@
 (ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/detect_batch.py   --card_weights /home/pi/models/card.pt   --bat_weights  /home/pi/models/battery_ncnn_model   --img /home/pi/batch_images/sample_10packs.jpg   --expected 2 --rotate 0 --out_dir /home/pi/batch_out_pt   --card_conf 0.50 --bat_conf 0.50
 Loading /home/pi/models/battery_ncnn_model for NCNN inference...
 
-Done. Cards: 10 | NG: 10 | Time: 1115.3 ms
-Image: /home/pi/batch_out_pt/batch_20251105_135523.jpg
-JSON:  /home/pi/batch_out_pt/batch_20251105_135523.json
-CSV:   /home/pi/batch_out_pt/batch_20251105_135523.csv
-(ai-env) pi@raspberrypi:~ $ python3 - << 'PY'
-from ultralytics import YOLO
-import ultralytics
-print("ultralytics version:", ultralytics.__version__)
-
-model = YOLO("/home/pi/models/card_ncnn_model")
-print("model.model_type:", getattr(model, "model_type", "unknown"))
-PY
-ultralytics version: 8.3.206
-WARNING ⚠️ Unable to automatically guess model task, assuming 'task=detect'. Explicitly define task for your model, i.e. 'task=detect', 'segment', 'classify','pose' or 'obb'.
-model.model_type: unknown
+Done. Cards: 10 | NG: 5 | Time: 330.7 ms
+Image: /home/pi/batch_out_pt/batch_20251107_114540.jpg
+JSON:  /home/pi/batch_out_pt/batch_20251107_114540.json
+CSV:   /home/pi/batch_out_pt/batch_20251107_114540.csv
+(ai-env) pi@raspberrypi:~ $ ^C
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/test_battery_full.py
+Loading /home/pi/models/battery_ncnn_model for NCNN inference...
+Total batteries: 61
+0 {'xyxy': (0, 0, 182, 458), 'conf': 0.9990234375}
+1 {'xyxy': (190, 0, 433, 500), 'conf': 0.998046875}
+2 {'xyxy': (0, 0, 392, 515), 'conf': 0.9970703125}
+3 {'xyxy': (449, 0, 576, 551), 'conf': 0.99609375}
+4 {'xyxy': (0, 0, 0, 511), 'conf': 0.9951171875}
+5 {'xyxy': (0, 0, 38, 474), 'conf': 0.990234375}
+6 {'xyxy': (341, 0, 469, 280), 'conf': 0.9873046875}
+7 {'xyxy': (0, 0, 227, 1024), 'conf': 0.98291015625}
+8 {'xyxy': (81, 0, 576, 960), 'conf': 0.97509765625}
+9 {'xyxy': (119, 0, 180, 244), 'conf': 0.97509765625}
+10 {'xyxy': (226, 0, 300, 260), 'conf': 0.97265625}
+11 {'xyxy': (0, 0, 0, 249), 'conf': 0.97265625}
+12 {'xyxy': (430, 0, 505, 181), 'conf': 0.97265625}
+13 {'xyxy': (271, 0, 576, 852), 'conf': 0.97265625}
+14 {'xyxy': (0, 0, 0, 213), 'conf': 0.9716796875}
+15 {'xyxy': (314, 0, 397, 225), 'conf': 0.9716796875}
+16 {'xyxy': (28, 0, 64, 264), 'conf': 0.970703125}
+17 {'xyxy': (0, 0, 68, 259), 'conf': 0.9697265625}
+18 {'xyxy': (115, 272, 451, 1024), 'conf': 0.96875}
+19 {'xyxy': (0, 0, 0, 238), 'conf': 0.96875}
+20 {'xyxy': (0, 224, 30, 1024), 'conf': 0.9658203125}
+21 {'xyxy': (0, 38, 101, 940), 'conf': 0.9658203125}
+22 {'xyxy': (317, 177, 465, 1024), 'conf': 0.96240234375}
+23 {'xyxy': (76, 175, 261, 1024), 'conf': 0.96240234375}
+24 {'xyxy': (0, 0, 0, 296), 'conf': 0.96044921875}
+25 {'xyxy': (250, 0, 338, 283), 'conf': 0.955078125}
+26 {'xyxy': (292, 0, 438, 249), 'conf': 0.95166015625}
+27 {'xyxy': (0, 0, 0, 511), 'conf': 0.95166015625}
+28 {'xyxy': (0, 0, 0, 720), 'conf': 0.94384765625}
+29 {'xyxy': (358, 0, 523, 506), 'conf': 0.94189453125}
+30 {'xyxy': (0, 0, 0, 246), 'conf': 0.93701171875}
+31 {'xyxy': (290, 0, 321, 246), 'conf': 0.93505859375}
+32 {'xyxy': (0, 0, 0, 680), 'conf': 0.93408203125}
+33 {'xyxy': (0, 0, 0, 746), 'conf': 0.9326171875}
+34 {'xyxy': (300, 0, 360, 279), 'conf': 0.927734375}
+35 {'xyxy': (0, 0, 0, 298), 'conf': 0.9248046875}
+36 {'xyxy': (268, 0, 391, 307), 'conf': 0.92431640625}
+37 {'xyxy': (338, 0, 576, 363), 'conf': 0.92333984375}
+38 {'xyxy': (0, 0, 23, 290), 'conf': 0.921875}
+39 {'xyxy': (0, 0, 0, 288), 'conf': 0.921875}
+40 {'xyxy': (397, 0, 478, 207), 'conf': 0.921875}
+41 {'xyxy': (316, 0, 340, 278), 'conf': 0.91845703125}
+42 {'xyxy': (63, 0, 161, 252), 'conf': 0.916015625}
+43 {'xyxy': (331, 10, 441, 440), 'conf': 0.9140625}
+44 {'xyxy': (377, 29, 461, 444), 'conf': 0.91162109375}
+45 {'xyxy': (376, 0, 439, 275), 'conf': 0.91015625}
+46 {'xyxy': (0, 0, 3, 298), 'conf': 0.9091796875}
+47 {'xyxy': (130, 0, 238, 253), 'conf': 0.90869140625}
+48 {'xyxy': (0, 0, 0, 758), 'conf': 0.90283203125}
+49 {'xyxy': (0, 30, 0, 468), 'conf': 0.89892578125}
+50 {'xyxy': (255, 0, 279, 274), 'conf': 0.89453125}
+51 {'xyxy': (121, 0, 229, 433), 'conf': 0.89453125}
+52 {'xyxy': (156, 0, 297, 426), 'conf': 0.89111328125}
+53 {'xyxy': (18, 0, 42, 250), 'conf': 0.890625}
+54 {'xyxy': (24, 0, 91, 237), 'conf': 0.890625}
+55 {'xyxy': (144, 257, 282, 647), 'conf': 0.88720703125}
+56 {'xyxy': (92, 0, 172, 432), 'conf': 0.88671875}
+57 {'xyxy': (379, 234, 533, 667), 'conf': 0.8857421875}
+58 {'xyxy': (0, 50, 0, 495), 'conf': 0.88525390625}
+59 {'xyxy': (0, 0, 0, 285), 'conf': 0.88427734375}
+60 {'xyxy': (432, 439, 576, 846), 'conf': 0.8828125}
+Saved to /home/pi/batch_out/test_full_battery.jpg
