@@ -1,9 +1,14 @@
-import os, cv2, numpy as np
+# battery_detector.py
+import os
+import cv2
+import numpy as np
 from ultralytics import YOLO
 
 def nms_numpy(boxes, scores, iou_thr=0.55, topk=80):
+    """Simple NMS for full-image battery detection."""
     if len(boxes) == 0:
         return np.array([], dtype=int)
+
     boxes = np.asarray(boxes, dtype=float)
     scores = np.asarray(scores, dtype=float)
 
@@ -31,47 +36,18 @@ def nms_numpy(boxes, scores, iou_thr=0.55, topk=80):
 
     return np.asarray(keep, dtype=int)
 
-def _load_ncnn(weights_path: str):
-    last_err = None
-    if os.path.isdir(weights_path):
-        try:
-            return YOLO(weights_path, task="detect")
-        except Exception as e:
-            last_err = e
-            for name in ("model.ncnn.param", "best.ncnn.param"):
-                p = os.path.join(weights_path, name)
-                if os.path.exists(p):
-                    try:
-                        return YOLO(p, task="detect")
-                    except Exception as e2:
-                        last_err = e2
-    else:
-        try:
-            return YOLO(weights_path, task="detect")
-        except Exception as e:
-            last_err = e
-            d = os.path.dirname(weights_path)
-            if os.path.isdir(d):
-                try:
-                    return YOLO(d, task="detect")
-                except Exception as e2:
-                    last_err = e2
-    raise last_err
-
 class BatteryDetector:
     """
-    Battery detector for NCNN / PyTorch models.
-
-    - detect_full() : 在整张图上跑一次，用于 batch 计数（推荐）
-    - detect_roi()  : 只在一个 ROI 上跑（旧逻辑，留着备用）
+    Battery detector using a normal .pt model (recommended).
+    如果你传入的是 NCNN 路径（*.ncnn.param），Ultralytics 也会跑，
+    但目前这份 NCNN 模型有问题，所以建议只用 .pt。
     """
 
     def __init__(self, weights: str, imgsz: int = 416, conf: float = 0.50, threads: int = 4):
-        os.environ.setdefault("OMP_NUM_THREADS", str(threads))
-        os.environ.setdefault("NCNN_THREADS", str(threads))
+        os.environ["OMP_NUM_THREADS"] = str(threads)
         os.environ.setdefault("NCNN_VERBOSE", "0")
 
-        self.model = _load_ncnn(weights)
+        self.model = YOLO(weights)      # 这里既可以是 .pt，也可以是 ncnn，但推荐 pt
         self.imgsz = int(imgsz)
         self.conf = float(conf)
 
@@ -81,54 +57,30 @@ class BatteryDetector:
             imgsz=self.imgsz, conf=self.conf, verbose=False
         )
 
-    def _predict_raw(self, bgr):
-        """Ultralytics raw predict -> (boxes[N,4], confs[N]) in original image coordinates."""
+    def detect_full(self, bgr):
+        """
+        在整张图上跑一次电池 YOLO，返回：
+        [ { "xyxy": (x1,y1,x2,y2), "conf": float }, ... ]
+        坐标是全图坐标。
+        """
         r = self.model.predict(
-            source=bgr, imgsz=self.imgsz, conf=self.conf,
-            iou=0.55, max_det=80, verbose=False
+            source=bgr,
+            imgsz=self.imgsz,
+            conf=self.conf,
+            iou=0.55,
+            max_det=80,
+            verbose=False
         )[0]
 
         if r.boxes is None or len(r.boxes) == 0:
-            return np.zeros((0, 4), dtype=float), np.zeros((0,), dtype=float)
+            return []
 
         boxes = r.boxes.xyxy.cpu().numpy()
         confs = (r.boxes.conf if r.boxes.conf is not None
                  else np.zeros((len(boxes), 1))).cpu().numpy().reshape(-1)
-        return boxes, confs
 
-    # ---------- 新：整张图上跑一次 ----------
-    def detect_full(self, bgr):
-        """
-        在整张图上跑 YOLO，返回：
-        [ { "xyxy": (x1,y1,x2,y2), "conf": float }, ... ]
-        坐标是全图坐标。
-        """
-        boxes, confs = self._predict_raw(bgr)
-        if len(boxes) == 0:
-            return []
-
+        # 再做一次 NMS，保证干净
         keep = nms_numpy(boxes, confs, iou_thr=0.55, topk=80)
-
-        out = []
-        for i in keep:
-            x1, y1, x2, y2 = map(int, boxes[i].tolist())
-            c = float(confs[i])
-            out.append({"xyxy": (x1, y1, x2, y2), "conf": c})
-        return out
-
-    # ---------- 旧：只在 ROI 上跑（备用） ----------
-    def detect_roi(self, roi_bgr, topk: int = 6):
-        """
-        只在小 ROI 上跑一次（旧逻辑），最多保留 topk 个候选框。
-        """
-        boxes, confs = self._predict_raw(roi_bgr)
-        if len(boxes) == 0:
-            return []
-
-        if len(boxes) > topk:
-            keep = np.argsort(-confs)[:topk]
-        else:
-            keep = np.arange(len(boxes))
 
         out = []
         for i in keep:
