@@ -1,29 +1,37 @@
 import os, cv2, numpy as np
 from ultralytics import YOLO
 
-def nms_numpy(boxes, scores, iou_thr=0.55, topk=50):
+def nms_numpy(boxes, scores, iou_thr=0.55, topk=80):
     if len(boxes) == 0:
         return np.array([], dtype=int)
-    x1,y1,x2,y2 = boxes[:,0], boxes[:,1], boxes[:,2], boxes[:,3]
-    areas = np.maximum(0, x2-x1) * np.maximum(0, y2-y1)
+    boxes = np.asarray(boxes, dtype=float)
+    scores = np.asarray(scores, dtype=float)
+
+    x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+    areas = np.maximum(0.0, x2 - x1) * np.maximum(0.0, y2 - y1)
     order = scores.argsort()[::-1]
+
     keep = []
     while order.size > 0 and len(keep) < topk:
         i = order[0]
         keep.append(i)
+
         xx1 = np.maximum(x1[i], x1[order[1:]])
         yy1 = np.maximum(y1[i], y1[order[1:]])
         xx2 = np.minimum(x2[i], x2[order[1:]])
         yy2 = np.minimum(y2[i], y2[order[1:]])
-        w = np.maximum(0.0, xx2-xx1)
-        h = np.maximum(0.0, yy2-yy1)
-        inter = w*h
+
+        w = np.maximum(0.0, xx2 - xx1)
+        h = np.maximum(0.0, yy2 - yy1)
+        inter = w * h
         ovr = inter / (areas[i] + areas[order[1:]] - inter + 1e-6)
+
         inds = np.where(ovr <= iou_thr)[0]
         order = order[inds + 1]
+
     return np.asarray(keep, dtype=int)
 
-def _load_ncnn(weights_path:str):
+def _load_ncnn(weights_path: str):
     last_err = None
     if os.path.isdir(weights_path):
         try:
@@ -51,36 +59,80 @@ def _load_ncnn(weights_path:str):
     raise last_err
 
 class BatteryDetector:
-    def __init__(self, weights:str, imgsz:int=416, conf:float=0.50, threads:int=4):
+    """
+    Battery detector for NCNN / PyTorch models.
+
+    - detect_full() : 在整张图上跑一次，用于 batch 计数（推荐）
+    - detect_roi()  : 只在一个 ROI 上跑（旧逻辑，留着备用）
+    """
+
+    def __init__(self, weights: str, imgsz: int = 416, conf: float = 0.50, threads: int = 4):
         os.environ.setdefault("OMP_NUM_THREADS", str(threads))
         os.environ.setdefault("NCNN_THREADS", str(threads))
         os.environ.setdefault("NCNN_VERBOSE", "0")
+
         self.model = _load_ncnn(weights)
         self.imgsz = int(imgsz)
         self.conf = float(conf)
+
+        # 预热
         _ = self.model.predict(
             source=np.zeros((self.imgsz, self.imgsz, 3), np.uint8),
             imgsz=self.imgsz, conf=self.conf, verbose=False
         )
 
-    def detect(self, bgr_roi):
+    def _predict_raw(self, bgr):
+        """Ultralytics raw predict -> (boxes[N,4], confs[N]) in original image coordinates."""
         r = self.model.predict(
-            source=bgr_roi, imgsz=self.imgsz, conf=self.conf,
+            source=bgr, imgsz=self.imgsz, conf=self.conf,
             iou=0.55, max_det=80, verbose=False
         )[0]
-        out=[]
-        if r.boxes is not None and len(r.boxes)>0:
-            boxes = r.boxes.xyxy.cpu().numpy()
-            confs = (r.boxes.conf if r.boxes.conf is not None else np.zeros((len(boxes),1))).cpu().numpy().reshape(-1)
 
-            # ROI 内电池数很少，超过60明显异常 → 做本地NMS并限制topk 6
-            if len(boxes) > 60:
-                keep = nms_numpy(boxes, confs, iou_thr=0.55, topk=6)
-            else:
-                keep = np.argsort(-confs)[:6]
+        if r.boxes is None or len(r.boxes) == 0:
+            return np.zeros((0, 4), dtype=float), np.zeros((0,), dtype=float)
 
-            for i in keep:
-                x1,y1,x2,y2 = map(int, boxes[i].tolist())
-                c = float(confs[i])
-                out.append({"xyxy": (x1,y1,x2,y2), "conf": c})
+        boxes = r.boxes.xyxy.cpu().numpy()
+        confs = (r.boxes.conf if r.boxes.conf is not None
+                 else np.zeros((len(boxes), 1))).cpu().numpy().reshape(-1)
+        return boxes, confs
+
+    # ---------- 新：整张图上跑一次 ----------
+    def detect_full(self, bgr):
+        """
+        在整张图上跑 YOLO，返回：
+        [ { "xyxy": (x1,y1,x2,y2), "conf": float }, ... ]
+        坐标是全图坐标。
+        """
+        boxes, confs = self._predict_raw(bgr)
+        if len(boxes) == 0:
+            return []
+
+        keep = nms_numpy(boxes, confs, iou_thr=0.55, topk=80)
+
+        out = []
+        for i in keep:
+            x1, y1, x2, y2 = map(int, boxes[i].tolist())
+            c = float(confs[i])
+            out.append({"xyxy": (x1, y1, x2, y2), "conf": c})
+        return out
+
+    # ---------- 旧：只在 ROI 上跑（备用） ----------
+    def detect_roi(self, roi_bgr, topk: int = 6):
+        """
+        只在小 ROI 上跑一次（旧逻辑），最多保留 topk 个候选框。
+        """
+        boxes, confs = self._predict_raw(roi_bgr)
+        if len(boxes) == 0:
+            return []
+
+        if len(boxes) > topk:
+            keep = np.argsort(-confs)[:topk]
+        else:
+            keep = np.arange(len(boxes))
+
+        out = []
+        for i in keep:
+            x1, y1, x2, y2 = map(int, boxes[i].tolist())
+            c = float(confs[i])
+            out.append({"xyxy": (x1, y1, x2, y2), "conf": c})
         return out
