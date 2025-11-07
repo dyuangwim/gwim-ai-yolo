@@ -7,7 +7,9 @@ from card_detector import CardDetector
 from battery_detector import BatteryDetector
 from utils_hw import Trigger, Buzzer
 
+
 def ensure_dir(p): os.makedirs(p, exist_ok=True)
+
 
 def draw_box(img, box, label=None, color=(0,255,255), thick=2):
     x1,y1,x2,y2 = map(int, box)
@@ -16,7 +18,9 @@ def draw_box(img, box, label=None, color=(0,255,255), thick=2):
         (tw,th),_ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
         y0 = max(0, y1 - th - 6)
         cv2.rectangle(img, (x1,y0), (x1+tw+8, y0+th+8), color, -1)
-        cv2.putText(img, label, (x1+4, y0+th+3), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
+        cv2.putText(img, label, (x1+4, y0+th+3),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
+
 
 def auto_rotate_if_needed(bgr, rotate:int):
     if rotate==0:   return bgr
@@ -25,15 +29,19 @@ def auto_rotate_if_needed(bgr, rotate:int):
     if rotate==270: return cv2.rotate(bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
     return bgr
 
+
 def capture_from_camera(width=1920, height=1080):
     from picamera2 import Picamera2
     picam2 = Picamera2()
-    cfg = picam2.create_still_configuration(main={"size": (width, height), "format":"RGB888"})
+    cfg = picam2.create_still_configuration(
+        main={"size": (width, height), "format":"RGB888"}
+    )
     picam2.configure(cfg)
     picam2.start(); time.sleep(0.6)
     arr = picam2.capture_array("main")
     picam2.stop(); picam2.close()
     return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+
 
 # ---------- NMS + 卡片过滤 ----------
 
@@ -62,6 +70,7 @@ def nms_numpy_local(boxes, scores, iou_thr=0.5, topk=32):
         order = order[inds + 1]
     return keep
 
+
 def filter_cards(cards, img_w, img_h, min_w=100, min_h=80):
     boxes=[]; scores=[]
     for c in cards:
@@ -77,6 +86,7 @@ def filter_cards(cards, img_w, img_h, min_w=100, min_h=80):
         return []
     keep_idx = nms_numpy_local(boxes, scores, iou_thr=0.5, topk=32)
     return [{"xyxy": boxes[i], "conf": scores[i]} for i in keep_idx]
+
 
 def dedup_batteries(bats, expected:int):
     """
@@ -114,6 +124,7 @@ def dedup_batteries(bats, expected:int):
 
     return selected
 
+
 # ---------- 核心：整图电池 + 卡片内分配 ----------
 
 def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector,
@@ -124,7 +135,7 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector,
     cards_raw = card_det.detect(bgr)
     cards = filter_cards(cards_raw, W, H)
 
-    # 2) 整张图电池检测
+    # 2) 整张图电池检测（用与你 Colab 相同的调用方式）
     bats_full = bat_det.detect_full(bgr)
 
     vis = bgr.copy()
@@ -182,20 +193,22 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector,
 
     return report, vis
 
+
 # ---------- main ----------
 
 def main():
     ap = argparse.ArgumentParser("Batch Card→Battery Counting (Pi5 + YOLO)")
     ap.add_argument("--card_weights", default="/home/pi/models/card.pt")
-    ap.add_argument("--bat_weights",  default="/home/pi/models/battery.pt")  # 👈 改成 .pt
+    ap.add_argument("--bat_weights",  default="/home/pi/models/battery.pt")
     ap.add_argument("--img", help="输入图片路径（有则直接处理）")
-    ap.add_argument("--expected", type=int, required=True, help="每包应有的电池数量，如 1/2/4/8")
+    ap.add_argument("--expected", type=int, required=True,
+                    help="每包应有的电池数量，如 1/2/4/8")
     ap.add_argument("--rotate", type=int, default=0, choices=[0,90,180,270])
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--card_imgsz", type=int, default=640)
-    ap.add_argument("--bat_imgsz", type=int, default=416)
+    ap.add_argument("--bat_imgsz", type=int, default=640)   # 目前不再使用，只是为了兼容参数
     ap.add_argument("--card_conf", type=float, default=0.50)
-    ap.add_argument("--bat_conf", type=float, default=0.50)
+    ap.add_argument("--bat_conf", type=float, default=None) # None=用模型默认 0.25
     ap.add_argument("--out_dir", default="/home/pi/batch_out")
     ap.add_argument("--save_name", default="auto")
     ap.add_argument("--trigger_pin", type=int, default=None)
@@ -213,11 +226,16 @@ def main():
     trig = Trigger(pin=args.trigger_pin, active_high=True) if args.from_camera else None
     buz  = Buzzer(pin=args.buzzer_pin, active_high=True) if args.buzzer_pin is not None else None
 
+    # 卡片还是用你原来的 imgsz / conf
     card_det = CardDetector(args.card_weights, imgsz=args.card_imgsz,
                             conf=args.card_conf, threads=args.threads)
-    bat_det  = BatteryDetector(args.bat_weights,  imgsz=args.bat_imgsz,
-                               conf=args.bat_conf,  threads=args.threads)
+    # 电池：使用新的 BatteryDetector（内部调用 model(bgr)）
+    bat_det  = BatteryDetector(args.bat_weights,
+                               imgsz=args.bat_imgsz,
+                               conf=args.bat_conf,
+                               threads=args.threads)
 
+    # 读图
     if args.img:
         bgr = cv2.imread(args.img)
         if bgr is None:
@@ -255,8 +273,8 @@ def main():
         for r in report:
             x1,y1,x2,y2 = r["card_box"]
             w.writerow([r["pack_index"],x1,y1,x2,y2,
-                        r["battery_count"],r["expected"],int(r["ok"]),
-                        f'{r["card_conf"]:.3f}'])
+                        r["battery_count"],r["expected"],
+                        int(r["ok"]), f'{r["card_conf"]:.3f}'])
 
     bad = [p for p in report if not p["ok"]]
     print(f"\nDone. Cards: {len(report)} | NG: {len(bad)} | Time: {dt:.1f} ms")
