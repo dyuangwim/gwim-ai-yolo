@@ -1,14 +1,24 @@
-(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/test_ultra.py
-/usr/lib/python3/dist-packages/gpiozero/input_devices.py:852: PWMSoftwareFallback: For more accurate readings, use the pigpio pin factory.See https://gpiozero.readthedocs.io/en/stable/api_input.html#distancesensor-hc-sr04 for more info
-  warnings.warn(PWMSoftwareFallback(
-Start measuring... (Ctrl+C to exit)
-^Cstance: 100.0 cm
-Bye
-(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/auto_capture.py
+ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/auto_capture.py
 /usr/lib/python3/dist-packages/gpiozero/input_devices.py:852: PWMSoftwareFallback: For more accurate readings, use the pigpio pin factory.See https://gpiozero.readthedocs.io/en/stable/api_input.html#distancesensor-hc-sr04 for more info
   warnings.warn(PWMSoftwareFallback(
 🟢 System ready. Waiting for object...
-/usr/lib/python3/dist-packages/gpiozero/input_devices.py:975: DistanceSensorNoEcho: no echo received
-  warnings.warn(DistanceSensorNoEcho('no echo received'))
-^C
-🛑 Exited by user.
+
+Distance:  11.4 cm
+📏 Object detected (11.4 cm) → Capturing image...
+[1:56:10.060789689] [4076]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+[1:56:10.071824421] [4145]  INFO RPI pisp.cpp:720 libpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[1:56:10.075454603] [4145]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx296.json
+[1:56:10.086885022] [4145]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a' for pipeline handler rpi/pisp
+[1:56:10.086932652] [4145]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a to CFE device /dev/media1 and ISP device /dev/media2 using PiSP variant BCM2712_D0
+[1:56:10.091481578] [4076]  INFO Camera camera.cpp:1215 configuring streams: (0) 1280x960-YUV420/sYCC (1) 1456x1088-BGGR_PISP_COMP1/RAW
+[1:56:10.091776672] [4145]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a - Selected sensor format: 1456x1088-SBGGR10_1X10/RAW - Selected CFE format: 1456x1088-PC1B/RAW
+📸 Captured: /home/pi/batch_images/auto_20251110_161543.jpg (1280x960)
+🚀 Running detection...
+
+Done. Cards: 9 | NG: 5 | Time: 676.6 ms
+Image: /home/pi/batch_out_pt/batch_20251110_161546.jpg
+JSON:  /home/pi/batch_out_pt/batch_20251110_161546.json
+CSV:   /home/pi/batch_out_pt/batch_20251110_161546.csv
+✅ Detection finished.
+
+⏸ Cooling 5 s before next trigger...
