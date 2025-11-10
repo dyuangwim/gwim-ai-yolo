@@ -2,5 +2,13 @@
 /usr/lib/python3/dist-packages/gpiozero/input_devices.py:852: PWMSoftwareFallback: For more accurate readings, use the pigpio pin factory.See https://gpiozero.readthedocs.io/en/stable/api_input.html#distancesensor-hc-sr04 for more info
   warnings.warn(PWMSoftwareFallback(
 Start measuring... (Ctrl+C to exit)
+^Cstance: 100.0 cm
+Bye
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/auto_capture.py
+/usr/lib/python3/dist-packages/gpiozero/input_devices.py:852: PWMSoftwareFallback: For more accurate readings, use the pigpio pin factory.See https://gpiozero.readthedocs.io/en/stable/api_input.html#distancesensor-hc-sr04 for more info
+  warnings.warn(PWMSoftwareFallback(
+🟢 System ready. Waiting for object...
 /usr/lib/python3/dist-packages/gpiozero/input_devices.py:975: DistanceSensorNoEcho: no echo received
   warnings.warn(DistanceSensorNoEcho('no echo received'))
+^C
+🛑 Exited by user.
