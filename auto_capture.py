@@ -13,7 +13,7 @@ TRIG_PIN = 23      # Ultrasonic Trigger pin (BCM 23)
 ECHO_PIN = 24      # Ultrasonic Echo pin (BCM 24)
 
 MAX_DISTANCE_M = 1.0       # DistanceSensor 量程（单位: 米）
-TRIGGER_DISTANCE_M = 0.12  # 触发阈值：0.12m = 12cm
+TRIGGER_DISTANCE_M = 0.5  # 触发阈值：0.5m = 5cm
 
 SAVE_DIR = "/home/pi/batch_images"
 OUT_DIR  = "/home/pi/batch_out_pt"
@@ -102,3 +102,4 @@ def main_loop():
 
 if __name__ == "__main__":
     main_loop()
+
