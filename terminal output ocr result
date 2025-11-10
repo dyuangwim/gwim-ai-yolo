@@ -1,6 +1,17 @@
-pi@raspberrypi:~ $ source ~/ai-env/bin/activate
+(ai-env) pi@raspberrypi:~ $ sudo apt install -y python3-gpiozero python3-lgpio
+Reading package lists... Done
+Building dependency tree... Done
+Reading state information... Done
+python3-gpiozero is already the newest version (2.0.1-0+rpt1).
+python3-lgpio is already the newest version (0.2.2-1~rpt1).
+python3-lgpio set to manually installed.
+0 upgraded, 0 newly installed, 0 to remove and 11 not upgraded.
 (ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/auto_capture.py
-Traceback (most recent call last):
-  File "/home/pi/battery_batch/auto_capture.py", line 22, in <module>
-    GPIO.setup(TRIG_PIN, GPIO.OUT)
-RuntimeError: Cannot determine SOC peripheral base address
+/usr/lib/python3/dist-packages/gpiozero/input_devices.py:852: PWMSoftwareFallback: For more accurate readings, use the pigpio pin factory.See https://gpiozero.readthedocs.io/en/stable/api_input.html#distancesensor-hc-sr04 for more info
+  warnings.warn(PWMSoftwareFallback(
+🟢 System ready. Waiting for object...
+/usr/lib/python3/dist-packages/gpiozero/input_devices.py:975: DistanceSensorNoEcho: no echo received
+  warnings.warn(DistanceSensorNoEcho('no echo received'))
+
+^C
+🛑 Exited by user.
