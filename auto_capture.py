@@ -1,31 +1,37 @@
 # auto_capture.py
-import os, time, cv2, subprocess
+import os, time, cv2, subprocess, warnings
 from datetime import datetime
 from picamera2 import Picamera2
-from gpiozero import DistanceSensor   # ✅ 用 gpiozero 替代 RPi.GPIO
+from gpiozero import DistanceSensor
+from gpiozero.input_devices import DistanceSensorNoEcho
+
+# 关闭 DistanceSensorNoEcho 的 warning（不影响实际测距逻辑）
+warnings.filterwarnings("ignore", category=DistanceSensorNoEcho)
 
 # ----------------- 配置区 -----------------
 TRIG_PIN = 23      # Ultrasonic Trigger pin (BCM 23)
 ECHO_PIN = 24      # Ultrasonic Echo pin (BCM 24)
 
-MAX_DISTANCE_M = 1.0      # DistanceSensor 量程（单位: 米）
-TRIGGER_DISTANCE_M = 0.12 # 触发阈值：0.12m = 12cm
+MAX_DISTANCE_M = 1.0       # DistanceSensor 量程（单位: 米）
+TRIGGER_DISTANCE_M = 0.12  # 触发阈值：0.12m = 12cm
 
 SAVE_DIR = "/home/pi/batch_images"
 OUT_DIR  = "/home/pi/batch_out_pt"
 CARD_MODEL = "/home/pi/models/card.pt"
 BAT_MODEL  = "/home/pi/models/battery.pt"
-EXPECTED   = 2        # 每包期望电池数量
-COOLDOWN_S = 5        # 每次触发后的冷却时间（防止连续多次触发）
+EXPECTED   = 2             # 每包期望电池数量
+COOLDOWN_S = 5             # 每次触发后的冷却时间（防止连续多次触发）
 # -----------------------------------------
 
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# 初始化超声波传感器（gpiozero 会自动选择 lgpio/其他后端）
-sensor = DistanceSensor(echo=ECHO_PIN,
-                        trigger=TRIG_PIN,
-                        max_distance=MAX_DISTANCE_M)
+# 初始化超声波传感器
+sensor = DistanceSensor(
+    echo=ECHO_PIN,
+    trigger=TRIG_PIN,
+    max_distance=MAX_DISTANCE_M
+)
 
 def get_distance_cm():
     """
@@ -77,8 +83,8 @@ def main_loop():
     try:
         while True:
             dist_cm = get_distance_cm()
-            # 为了避免打印太乱，可以只偶尔打印
-            # print(f"Distance: {dist_cm:.1f} cm", end="\r")
+            # 👉 每次循环都打印当前距离，方便你观察
+            print(f"Distance: {dist_cm:5.1f} cm", end="\r")
 
             if dist_cm < TRIGGER_DISTANCE_M * 100.0:
                 print(f"\n📏 Object detected ({dist_cm:.1f} cm) → Capturing image...")
