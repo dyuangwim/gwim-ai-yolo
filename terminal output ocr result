@@ -1,6 +1,6 @@
-python3 /home/pi/battery_batch/detect_batch.py \
-  --card_weights /home/pi/models/card.pt \
-  --bat_weights  /home/pi/models/battery.pt \
-  --img /home/pi/batch_images/sample_10packs.jpg \
-  --expected 2 --rotate 0 --out_dir /home/pi/batch_out_pt \
-  --card_conf 0.50
+pi@raspberrypi:~ $ source ~/ai-env/bin/activate
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/auto_capture.py
+Traceback (most recent call last):
+  File "/home/pi/battery_batch/auto_capture.py", line 22, in <module>
+    GPIO.setup(TRIG_PIN, GPIO.OUT)
+RuntimeError: Cannot determine SOC peripheral base address
