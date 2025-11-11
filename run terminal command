@@ -76,5 +76,11 @@ PY
 
 
 
-python3 /home/pi/battery_batch/test_battery_full.py
+source ~/ai-env/bin/activate
+
+python3 /home/pi/battery_batch/auto_capture.py \
+  --expected 2 \
+  --buzzer_pin 21 \
+  --keep_raw 200 \
+  --keep_out 500
 
