@@ -1,7 +1,7 @@
 # utils_hw.py
 import time
 
-# 我们优先使用 gpiozero，在所有 Pi 型号上都支持
+# 使用 gpiozero，在 Raspberry Pi 5 + python3-lgpio 环境下工作良好
 try:
     from gpiozero import DigitalInputDevice, Buzzer as GZBuzzer
     _HAS_GZ = True
@@ -12,8 +12,7 @@ except Exception:
 class Trigger:
     """
     光电/接近传感器触发（低电平/高电平均可配置）。
-    - pin: BCM 引脚号
-    - active_high: True 表示高电平为“有物体”
+    无硬件时退化为延时等待。
     """
     def __init__(self, pin: int = None, active_high: bool = True, debounce_ms: int = 60):
         self.pin = pin
@@ -22,7 +21,8 @@ class Trigger:
         self.device = None
 
         if _HAS_GZ and pin is not None:
-            # pull_up = 对应逻辑：active_high=True → 下拉；active_high=False → 上拉
+            # active_high=True → 使用下拉电阻（pull_up=False）
+            # active_high=False → 使用上拉电阻（pull_up=True）
             pull_up = not active_high
             try:
                 self.device = DigitalInputDevice(pin, pull_up=pull_up)
@@ -31,8 +31,8 @@ class Trigger:
 
     def wait(self, fallback_seconds: float = 0.0):
         """
-        阻塞等待一次有效触发。
-        如果没有硬件（device=None），则简单 sleep fallback_seconds。
+        阻塞等待一次“稳定触发”。
+        - 如果没有硬件，就简单 sleep fallback_seconds。
         """
         if self.device is None:
             if fallback_seconds > 0:
@@ -56,9 +56,9 @@ class Trigger:
 
 class Buzzer:
     """
-    简单蜂鸣器输出（低/高电平有效）。
-    - pin: BCM 引脚号
-    - active_high: True = 输出高电平时蜂鸣器响
+    简单蜂鸣器输出。
+    - pin: BCM 引脚号（例如 21）
+    - active_high: True 表示输出高电平时蜂鸣器响
     """
     def __init__(self, pin: int = None, active_high: bool = True):
         self.pin = pin
@@ -67,19 +67,21 @@ class Buzzer:
 
         if _HAS_GZ and pin is not None:
             try:
+                # gpiozero.Buzzer 默认 active_high=True，我们直接传进去
                 self.dev = GZBuzzer(pin, active_high=active_high)
-                # 确保默认是关闭状态
-                self.dev.off()
+                self.dev.off()   # 确保上电时不响
             except Exception:
                 self.dev = None
 
     def beep(self, ms: int = 120):
         """
-        发声 ms 毫秒。如果没有硬件，就只 sleep。
+        蜂鸣器响 ms 毫秒。
+        如果没有硬件，则只 sleep，保证主流程不崩。
         """
         if self.dev is None:
             time.sleep(ms / 1000.0)
             return
+
         self.dev.on()
         time.sleep(ms / 1000.0)
         self.dev.off()
