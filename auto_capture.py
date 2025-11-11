@@ -1,9 +1,20 @@
 # auto_capture.py
-import os, time, cv2, subprocess, warnings, argparse
+import os
+import time
+import cv2
+import json
+import glob
+import subprocess
+import warnings
+import argparse
+import threading
 from datetime import datetime
+
 from picamera2 import Picamera2
 from gpiozero import DistanceSensor
 from gpiozero.input_devices import DistanceSensorNoEcho
+
+from utils_hw import Buzzer  # 我们用自己写的 gpiozero 版 Buzzer
 
 # 忽略 DistanceSensor 的无回波警告（不影响实际测距逻辑）
 warnings.filterwarnings("ignore", category=DistanceSensorNoEcho)
@@ -19,7 +30,7 @@ BAT_MODEL  = "/home/pi/models/battery.pt"
 # Ultrasonic 引脚配置（BCM 编号）
 TRIG_PIN = 23
 ECHO_PIN = 24
-MAX_DISTANCE_M = 1.0  # 测距量程
+MAX_DISTANCE_M = 1.0  # 测距量程（1m）
 
 os.makedirs(SAVE_DIR, exist_ok=True)
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -28,45 +39,55 @@ os.makedirs(OUT_DIR, exist_ok=True)
 sensor = DistanceSensor(
     echo=ECHO_PIN,
     trigger=TRIG_PIN,
-    max_distance=MAX_DISTANCE_M
+    max_distance=MAX_DISTANCE_M,
 )
+
 
 def parse_args():
     ap = argparse.ArgumentParser("Ultrasonic-triggered auto capture + battery batch detect")
     ap.add_argument(
         "--expected", type=int, default=0,
-        help="每包应有的电池数量，如 1/2/3/4（<=0 则启动时手动输入）"
+        help="每包应有的电池数量，如 1/2/3/4（<=0 则启动时手动输入）",
     )
     ap.add_argument(
         "--buzzer_pin", type=int, default=None,
-        help="蜂鸣器 GPIO（BCM 编号，例如 21）；不设则不响铃"
+        help="蜂鸣器 GPIO（BCM 编号，例如 21）；不设则不响铃",
     )
     ap.add_argument(
         "--trigger_distance", type=float, default=0.12,
-        help="触发距离（米），默认 0.12 = 12cm"
+        help="触发距离（米），默认 0.12 = 12cm",
     )
     ap.add_argument(
         "--cooldown", type=float, default=5.0,
-        help="每次触发后冷却时间（秒），默认 5s"
+        help="每次触发后冷却时间（秒），默认 5s",
+    )
+    ap.add_argument(
+        "--keep_raw", type=int, default=200,
+        help="最多保留多少张原始自动照片 (SAVE_DIR) 默认 200 张",
+    )
+    ap.add_argument(
+        "--keep_out", type=int, default=500,
+        help="最多保留多少组输出文件 (OUT_DIR 下的 jpg/json/csv)，默认 500 组",
     )
     return ap.parse_args()
+
 
 def get_distance_cm():
     """返回当前测得的距离（单位 cm）"""
     d_m = sensor.distance * MAX_DISTANCE_M
     return d_m * 100.0
 
+
 def capture_image():
     """
-    拍照并返回保存路径
-    使用与 run_async 相同的相机配置和颜色转换，
-    确保视角和颜色一致。
+    拍照并返回 (图片路径, base_name)
+    - base_name 用来让 detect_batch.py 存同名的 jpg/json/csv
     """
     picam2 = Picamera2()
 
     cfg = picam2.create_preview_configuration(
         main={"size": (CAM_W, CAM_H), "format": "YUV420"},
-        controls={"FrameRate": 30}
+        controls={"FrameRate": 30},
     )
     picam2.configure(cfg)
     picam2.start()
@@ -82,17 +103,23 @@ def capture_image():
     picam2.close()
 
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_path = os.path.join(SAVE_DIR, f"auto_{ts}.jpg")
+    base_name = f"auto_{ts}"
+    save_path = os.path.join(SAVE_DIR, f"{base_name}.jpg")
     cv2.imwrite(save_path, bgr)
     print(f"📸 Captured: {save_path} ({CAM_W}x{CAM_H})")
-    return save_path
+    return save_path, base_name
 
-def run_detection(img_path, expected, buzzer_pin):
+
+def run_detection(img_path, base_name, expected):
     """
     调用 detect_batch.py 进行检测
-    - expected: 每包电池数
-    - buzzer_pin: 若非 None，则传给 detect_batch，让其在有 NG 时控制蜂鸣器
+    - 不再把 buzzer_pin 传给 detect_batch，让报警由本文件统一处理（持续响）
+    - save_name 使用 base_name，这样 JSON 路径可以预先知道
+    返回:
+        (ng_count, json_path)
     """
+    json_path = os.path.join(OUT_DIR, f"{base_name}.json")
+
     cmd = [
         "python3", "/home/pi/battery_batch/detect_batch.py",
         "--card_weights", CARD_MODEL,
@@ -101,14 +128,66 @@ def run_detection(img_path, expected, buzzer_pin):
         "--expected", str(expected),
         "--rotate", "0",
         "--out_dir", OUT_DIR,
-        "--card_conf", "0.50"
+        "--card_conf", "0.50",
+        "--save_name", base_name,
     ]
-    if buzzer_pin is not None:
-        cmd += ["--buzzer_pin", str(buzzer_pin)]
-
     print("🚀 Running detection...")
     subprocess.run(cmd)
-    print("✅ Detection finished.\n")
+    print("✅ Detection finished.")
+
+    # 解析 JSON 判断 NG 数量
+    ng_count = 0
+    try:
+        with open(json_path, "r") as f:
+            data = json.load(f)
+        packs = data.get("packs", [])
+        ng_count = len([p for p in packs if not p.get("ok", True)])
+        print(f"📊 NG packs in this image: {ng_count}")
+    except Exception as e:
+        print("⚠️ Failed to read JSON:", e)
+
+    return ng_count, json_path
+
+
+def alarm_beep_loop(bz: Buzzer, stop_event: threading.Event):
+    """
+    在独立线程里循环 beep，直到 stop_event 被 set。
+    """
+    while not stop_event.is_set():
+        bz.beep(200)        # 响 200ms
+        time.sleep(0.1)     # 间隔 100ms
+
+
+def cleanup_dir(path, pattern, keep_last):
+    """
+    只保留最新 keep_last 个匹配 pattern 的文件，其余自动删除。
+    """
+    if keep_last <= 0:
+        return
+    files = glob.glob(os.path.join(path, pattern))
+    if len(files) <= keep_last:
+        return
+    files_sorted = sorted(files, key=os.path.getmtime, reverse=True)
+    for f in files_sorted[keep_last:]:
+        try:
+            os.remove(f)
+            # print("🧹 deleted", f)
+        except Exception:
+            pass
+
+
+def cleanup_outputs(keep_raw: int, keep_out: int):
+    """
+    清理 SAVE_DIR 和 OUT_DIR 里的旧文件，防止 sd card 用爆。
+    """
+    # 原始自动拍照图
+    cleanup_dir(SAVE_DIR, "auto_*.jpg", keep_last=keep_raw)
+
+    # 输出图 / json / csv
+    cleanup_dir(OUT_DIR, "*.jpg",  keep_last=keep_out)
+    cleanup_dir(OUT_DIR, "*.json", keep_last=keep_out)
+    cleanup_dir(OUT_DIR, "*.csv",  keep_last=keep_out)
+
 
 def main():
     args = parse_args()
@@ -124,12 +203,14 @@ def main():
             print("❗ 输入无效，请重新输入一个正整数。")
     print(f"🔢 当前包装设定: 每包 {expected} 颗电池")
 
-    # 2) trigger 距离 & 冷却时间 & buzzer pin
     trigger_distance_m = float(args.trigger_distance)
     cooldown_s = float(args.cooldown)
-    buzzer_pin = args.buzzer_pin
-    if buzzer_pin is not None:
-        print(f"🔔 蜂鸣器 GPIO (BCM): {buzzer_pin}（有 NG 时会响）")
+
+    # 2) 初始化蜂鸣器（统一在这里管理报警）
+    buz = None
+    if args.buzzer_pin is not None:
+        buz = Buzzer(pin=args.buzzer_pin, active_high=True)
+        print(f"🔔 蜂鸣器 GPIO (BCM): {args.buzzer_pin}（有 NG 时会持续报警，按 Enter 停止）")
     else:
         print("🔔 未设置蜂鸣器 GPIO（检测 NG 不会响铃）")
 
@@ -142,8 +223,25 @@ def main():
 
             if dist_cm < trigger_distance_m * 100.0:
                 print(f"\n📏 Object detected ({dist_cm:.1f} cm) → Capturing image...")
-                img_path = capture_image()
-                run_detection(img_path, expected, buzzer_pin)
+                img_path, base_name = capture_image()
+                ng_count, json_path = run_detection(img_path, base_name, expected)
+
+                # 自动清理旧文件
+                cleanup_outputs(args.keep_raw, args.keep_out)
+
+                # 如果有 NG → 启动持续报警，直到用户按 Enter
+                if ng_count > 0 and buz is not None:
+                    print(f"❌ 检测到 {ng_count} 个 NG 包装，开始持续报警！")
+                    stop_evt = threading.Event()
+                    th = threading.Thread(
+                        target=alarm_beep_loop, args=(buz, stop_evt), daemon=True
+                    )
+                    th.start()
+                    input("🔕 按 Enter 键停止蜂鸣器后继续...\n")
+                    stop_evt.set()
+                    th.join()
+                    print("🔕 报警已停止。")
+
                 print(f"⏸ Cooling {cooldown_s:.1f} s before next trigger...\n")
                 time.sleep(cooldown_s)
             else:
@@ -153,6 +251,7 @@ def main():
         print("\n🛑 Exited by user.")
     except Exception as e:
         print("\n❌ Error:", e)
+
 
 if __name__ == "__main__":
     main()
