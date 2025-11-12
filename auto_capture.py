@@ -196,12 +196,12 @@ def main():
     expected = args.expected
     if expected <= 0:
         while True:
-            s = input("请输入每包应有的电池数量 (1/2/3/4/...): ").strip()
+            s = input("Please enter the number of batteries that should be in each pack (1/2/3/4/...):").strip()
             if s.isdigit() and int(s) > 0:
                 expected = int(s)
                 break
-            print("❗ 输入无效，请重新输入一个正整数。")
-    print(f"🔢 当前包装设定: 每包 {expected} 颗电池")
+            print("❗ Invalid input, please enter a positive integer again.")
+    print(f"🔢 Current packaging settings: {expected} batteries per pack")
 
     trigger_distance_m = float(args.trigger_distance)
     cooldown_s = float(args.cooldown)
@@ -210,9 +210,9 @@ def main():
     buz = None
     if args.buzzer_pin is not None:
         buz = Buzzer(pin=args.buzzer_pin, active_high=True)
-        print(f"🔔 蜂鸣器 GPIO (BCM): {args.buzzer_pin}（有 NG 时会持续报警，按 Enter 停止）")
+        print(f"🔔 Buzzer GPIO (BCM):{args.buzzer_pin}(An alarm will continuously sound if there is an NG (Not Okay) error; press Enter to stop.)")
     else:
-        print("🔔 未设置蜂鸣器 GPIO（检测 NG 不会响铃）")
+        print("🔔 No buzzer GPIO set (no ringing when detecting NG)")
 
     print("🟢 System ready. Waiting for object...")
 
@@ -231,16 +231,16 @@ def main():
 
                 # 如果有 NG → 启动持续报警，直到用户按 Enter
                 if ng_count > 0 and buz is not None:
-                    print(f"❌ 检测到 {ng_count} 个 NG 包装，开始持续报警！")
+                    print(f"❌ {ng_count} NG packages detected, continuous alerts initiated!")
                     stop_evt = threading.Event()
                     th = threading.Thread(
                         target=alarm_beep_loop, args=(buz, stop_evt), daemon=True
                     )
                     th.start()
-                    input("🔕 按 Enter 键停止蜂鸣器后继续...\n")
+                    input("🔕 Press Enter to stop the buzzer and continue...\n")
                     stop_evt.set()
                     th.join()
-                    print("🔕 报警已停止。")
+                    print("🔕 The alarm has been stopped.")
 
                 print(f"⏸ Cooling {cooldown_s:.1f} s before next trigger...\n")
                 time.sleep(cooldown_s)
