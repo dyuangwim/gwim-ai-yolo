@@ -49,9 +49,10 @@ def parse_args():
         "--expected", type=int, default=0,
         help="每包应有的电池数量，如 1/2/3/4（<=0 则启动时手动输入）",
     )
+    # ⭐ 默认直接用 GPIO21，这样就不用每次都打 --buzzer_pin 21 了
     ap.add_argument(
-        "--buzzer_pin", type=int, default=None,
-        help="蜂鸣器 GPIO（BCM 编号，例如 21）；不设则不响铃",
+        "--buzzer_pin", type=int, default=21,
+        help="蜂鸣器 GPIO（BCM 编号），默认 21；设为 0 或负数则关闭蜂鸣器",
     )
     ap.add_argument(
         "--trigger_distance", type=float, default=0.12,
@@ -171,7 +172,6 @@ def cleanup_dir(path, pattern, keep_last):
     for f in files_sorted[keep_last:]:
         try:
             os.remove(f)
-            # print("🧹 deleted", f)
         except Exception:
             pass
 
@@ -196,7 +196,9 @@ def main():
     expected = args.expected
     if expected <= 0:
         while True:
-            s = input("Please enter the number of batteries that should be in each pack (1/2/3/4/...):").strip()
+            s = input(
+                "Please enter the number of batteries that should be in each pack (1/2/3/4/...):"
+            ).strip()
             if s.isdigit() and int(s) > 0:
                 expected = int(s)
                 break
@@ -208,9 +210,12 @@ def main():
 
     # 2) 初始化蜂鸣器（统一在这里管理报警）
     buz = None
-    if args.buzzer_pin is not None:
+    if args.buzzer_pin is not None and args.buzzer_pin > 0:
         buz = Buzzer(pin=args.buzzer_pin, active_high=True)
-        print(f"🔔 Buzzer GPIO (BCM):{args.buzzer_pin}(An alarm will continuously sound if there is an NG (Not Okay) error; press Enter to stop.)")
+        print(
+            f"🔔 Buzzer GPIO (BCM): {args.buzzer_pin} "
+            f"(An alarm will continuously sound if there is an NG (Not Okay) error; press Enter to stop.)"
+        )
     else:
         print("🔔 No buzzer GPIO set (no ringing when detecting NG)")
 
@@ -224,7 +229,7 @@ def main():
             if dist_cm < trigger_distance_m * 100.0:
                 print(f"\n📏 Object detected ({dist_cm:.1f} cm) → Capturing image...")
                 img_path, base_name = capture_image()
-                ng_count, json_path = run_detection(img_path, base_name, expected)
+                ng_count, _ = run_detection(img_path, base_name, expected)
 
                 # 自动清理旧文件
                 cleanup_outputs(args.keep_raw, args.keep_out)
