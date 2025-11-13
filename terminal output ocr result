@@ -1,69 +1,30 @@
 (ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/auto_capture.py   --expected 2   --buzzer_pin 21   --keep_raw 200   --keep_out 500
 /usr/lib/python3/dist-packages/gpiozero/input_devices.py:852: PWMSoftwareFallback: For more accurate readings, use the pigpio pin factory.See https://gpiozero.readthedocs.io/en/stable/api_input.html#distancesensor-hc-sr04 for more info
   warnings.warn(PWMSoftwareFallback(
-🔢 当前包装设定: 每包 2 颗电池
-🔔 蜂鸣器 GPIO (BCM): 21（有 NG 时会持续报警，按 Enter 停止）
-🟢 System ready. Waiting for object...
-^Cstance: 100.0 cmcm
-🛑 Exited by user.
-(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/auto_capture.py
-/usr/lib/python3/dist-packages/gpiozero/input_devices.py:852: PWMSoftwareFallback: For more accurate readings, use the pigpio pin factory.See https://gpiozero.readthedocs.io/en/stable/api_input.html#distancesensor-hc-sr04 for more info
-  warnings.warn(PWMSoftwareFallback(
-Please enter the number of batteries that should be in each pack (1/2/3/4/...):0   
-❗ Invalid input, please enter a positive integer again.
-Please enter the number of batteries that should be in each pack (1/2/3/4/...):1
-🔢 Current packaging settings: 1 batteries per pack
-🔔 No buzzer GPIO set (no ringing when detecting NG)
-🟢 System ready. Waiting for object...
-Distance:   5.0 cm
-📏 Object detected (5.0 cm) → Capturing image...
-[1:56:06.121731919] [3235]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
-[1:56:06.132728242] [3258]  INFO RPI pisp.cpp:720 libpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
-[1:56:06.136326516] [3258]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx296.json
-[1:56:06.147053359] [3258]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a' for pipeline handler rpi/pisp
-[1:56:06.147103062] [3258]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a to CFE device /dev/media0 and ISP device /dev/media2 using PiSP variant BCM2712_D0
-[1:56:06.154745072] [3235]  INFO Camera camera.cpp:1215 configuring streams: (0) 1280x960-YUV420/sYCC (1) 1456x1088-BGGR_PISP_COMP1/RAW
-[1:56:06.154930089] [3258]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a - Selected sensor format: 1456x1088-SBGGR10_1X10/RAW - Selected CFE format: 1456x1088-PC1B/RAW
-📸 Captured: /home/pi/batch_images/auto_20251112_094440.jpg (1280x960)
-🚀 Running detection...
-
-Done. Cards: 1 | NG: 1 | Time: 895.0 ms
-Image: /home/pi/batch_out_pt/auto_20251112_094440.jpg
-JSON:  /home/pi/batch_out_pt/auto_20251112_094440.json
-CSV:   /home/pi/batch_out_pt/auto_20251112_094440.csv
-✅ Detection finished.
-📊 NG packs in this image: 1
-⏸ Cooling 5.0 s before next trigger...
-
-^Cstance: 100.0 cm
-🛑 Exited by user.
-(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/auto_capture.py   --expected 2   --buzzer_pin 21   --keep_raw 200   --keep_out 500
-/usr/lib/python3/dist-packages/gpiozero/input_devices.py:852: PWMSoftwareFallback: For more accurate readings, use the pigpio pin factory.See https://gpiozero.readthedocs.io/en/stable/api_input.html#distancesensor-hc-sr04 for more info
-  warnings.warn(PWMSoftwareFallback(
 🔢 Current packaging settings: 2 batteries per pack
-🔔 Buzzer GPIO (BCM):21(An alarm will continuously sound if there is an NG (Not Okay) error; press Enter to stop.)
+🔔 Buzzer GPIO (BCM): 21 (An alarm will continuously sound if there is an NG (Not Okay) error; press Enter to stop.)
 🟢 System ready. Waiting for object...
-Distance:   8.2 cm
-📏 Object detected (8.2 cm) → Capturing image...
-[1:56:36.407351113] [3298]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
-[1:56:36.418381992] [3313]  INFO RPI pisp.cpp:720 libpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
-[1:56:36.421958526] [3313]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx296.json
-[1:56:36.432712981] [3313]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a' for pipeline handler rpi/pisp
-[1:56:36.432759314] [3313]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a to CFE device /dev/media0 and ISP device /dev/media2 using PiSP variant BCM2712_D0
-[1:56:36.438191300] [3298]  INFO Camera camera.cpp:1215 configuring streams: (0) 1280x960-YUV420/sYCC (1) 1456x1088-BGGR_PISP_COMP1/RAW
-[1:56:36.438440224] [3313]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a - Selected sensor format: 1456x1088-SBGGR10_1X10/RAW - Selected CFE format: 1456x1088-PC1B/RAW
-📸 Captured: /home/pi/batch_images/auto_20251112_094510.jpg (1280x960)
+Distance:   6.7 cm
+📏 Object detected (6.7 cm) → Capturing image...
+[0:08:43.183396610] [2697]  INFO Camera camera_manager.cpp:330 libcamera v0.5.2+99-bfd68f78
+[0:08:43.194550360] [2712]  INFO RPI pisp.cpp:720 libpisp version v1.2.1 981977ff21f3 29-04-2025 (14:13:50)
+[0:08:43.198245709] [2712]  INFO IPAProxy ipa_proxy.cpp:180 Using tuning file /usr/share/libcamera/ipa/rpi/pisp/imx296.json
+[0:08:43.209025811] [2712]  INFO Camera camera_manager.cpp:220 Adding camera '/base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a' for pipeline handler rpi/pisp
+[0:08:43.209072978] [2712]  INFO RPI pisp.cpp:1179 Registered camera /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a to CFE device /dev/media2 and ISP device /dev/media0 using PiSP variant BCM2712_D0
+[0:08:43.217016138] [2697]  INFO Camera camera.cpp:1215 configuring streams: (0) 1280x960-YUV420/sYCC (1) 1456x1088-BGGR_PISP_COMP1/RAW
+[0:08:43.217192379] [2712]  INFO RPI pisp.cpp:1483 Sensor: /base/axi/pcie@1000120000/rp1/i2c@80000/imx296@1a - Selected sensor format: 1456x1088-SBGGR10_1X10/RAW - Selected CFE format: 1456x1088-PC1B/RAW
+📸 Captured: /home/pi/batch_images/auto_20251113_085130.jpg (1280x960)
 🚀 Running detection...
 
-Done. Cards: 1 | NG: 1 | Time: 668.8 ms
-Image: /home/pi/batch_out_pt/auto_20251112_094510.jpg
-JSON:  /home/pi/batch_out_pt/auto_20251112_094510.json
-CSV:   /home/pi/batch_out_pt/auto_20251112_094510.csv
+Done. Cards: 11 | NG: 7 | Time: 674.4 ms
+Image: /home/pi/batch_out_pt/auto_20251113_085130.jpg
+JSON:  /home/pi/batch_out_pt/auto_20251113_085130.json
+CSV:   /home/pi/batch_out_pt/auto_20251113_085130.csv
 ✅ Detection finished.
-📊 NG packs in this image: 1
-❌ 1 NG packages detected, continuous alerts initiated!
+📊 NG packs in this image: 7
+❌ 7 NG packages detected, continuous alerts initiated!
 🔕 Press Enter to stop the buzzer and continue...
- 
+
 🔕 The alarm has been stopped.
 ⏸ Cooling 5.0 s before next trigger...
 
