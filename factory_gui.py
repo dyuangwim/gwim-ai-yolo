@@ -20,7 +20,6 @@ class ResultCard(QtWidgets.QFrame):
         self.setFrameShape(QtWidgets.QFrame.NoFrame)
 
         border_color = "#22c55e" if info.get("ng_count", 0) == 0 else "#ef4444"
-
         self.setStyleSheet(f"""
         QFrame#ResultCard {{
             border-radius: 12px;
@@ -33,7 +32,7 @@ class ResultCard(QtWidgets.QFrame):
         root.setContentsMargins(2, 2, 2, 2)
         root.setSpacing(0)
 
-        # 上面：黑色图像区域
+        # 上：黑色图像区域
         img_frame = QtWidgets.QFrame()
         img_frame.setStyleSheet("background:#020617; border-radius:10px;")
         img_layout = QtWidgets.QVBoxLayout(img_frame)
@@ -46,7 +45,7 @@ class ResultCard(QtWidgets.QFrame):
         img_layout.addWidget(self.imageLabel)
         root.addWidget(img_frame, 1)
 
-        # 下面：白色信息条
+        # 下：白色信息条
         bottom = QtWidgets.QFrame()
         bottom.setStyleSheet("background:white; border-radius:10px;")
         bottom_layout = QtWidgets.QVBoxLayout(bottom)
@@ -80,7 +79,7 @@ class ResultCard(QtWidgets.QFrame):
             "font-weight:bold; padding:2px 6px;"
             % ("#22c55e" if info.get("ng_count", 0) == 0 else "#ef4444")
         )
-        badge.move(self.width() - 80, 8)
+        badge.move(self.width() - badge.width() - 8, 8)
         badge.raise_()
         self._badge = badge
 
@@ -91,7 +90,7 @@ class ResultCard(QtWidgets.QFrame):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        # badge 固定在右上角
+        # 保证 badge 一直在右上角
         self._badge.move(self.width() - self._badge.width() - 8, 8)
 
     def set_image(self, pixmap):
@@ -139,7 +138,6 @@ class DetailDialog(QtWidgets.QDialog):
         ts_label.setStyleSheet("color:#6b7280;")
         layout.addWidget(ts_label)
 
-        # image
         img_frame = QtWidgets.QFrame()
         img_frame.setStyleSheet("background:white; border-radius:12px;")
         img_layout = QtWidgets.QVBoxLayout(img_frame)
@@ -159,7 +157,6 @@ class DetailDialog(QtWidgets.QDialog):
                                     QtCore.Qt.SmoothTransformation)
                 self.imageLabel.setPixmap(scaled)
 
-        # expected vs detected summary
         info_frame = QtWidgets.QFrame()
         info_frame.setStyleSheet("background:white; border-radius:12px;")
         info_layout = QtWidgets.QGridLayout(info_frame)
@@ -183,8 +180,8 @@ class DetailDialog(QtWidgets.QDialog):
         lbl3 = QtWidgets.QLabel("NG packs")
         lbl3.setStyleSheet("color:#6b7280;")
         val3 = QtWidgets.QLabel(str(ng_count))
-        val3.setStyleSheet("font-weight:bold; color:%s;"
-                           % ("#22c55e" if ng_count == 0 else "#ef4444"))
+        val3.setStyleSheet("font-weight:bold; color:%s;" %
+                           ("#22c55e" if ng_count == 0 else "#ef4444"))
 
         info_layout.addWidget(lbl1, 0, 0)
         info_layout.addWidget(val1, 1, 0)
@@ -192,15 +189,12 @@ class DetailDialog(QtWidgets.QDialog):
         info_layout.addWidget(val2, 1, 1)
         info_layout.addWidget(lbl3, 0, 2)
         info_layout.addWidget(val3, 1, 2)
-
         layout.addWidget(info_frame)
 
-        # issue description
         issue_frame = QtWidgets.QFrame()
         issue_frame.setStyleSheet(
-            "background:%s; border-radius:12px;"
-            % ("#dcfce7" if ng_count == 0 else "#fee2e2")
-        )
+            "background:%s; border-radius:12px;" %
+            ("#dcfce7" if ng_count == 0 else "#fee2e2"))
         issue_layout = QtWidgets.QVBoxLayout(issue_frame)
         issue_layout.setContentsMargins(12, 8, 12, 8)
         issue_title = QtWidgets.QLabel("Status")
@@ -283,11 +277,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
 
-        # 加载 .ui
         ui_path = os.path.join(os.path.dirname(__file__), "batch_inspector.ui")
         uic.loadUi(ui_path, self)
 
-        # 全局样式（颜色更接近 Figma）
+        # 全局样式
         self.setStyleSheet("""
         QMainWindow { background:#f1f5f9; }
         QLabel { font-size:14px; }
@@ -344,14 +337,42 @@ class MainWindow(QtWidgets.QMainWindow):
         self.warning_msg.setStyleSheet("color:#b91c1c;")
         self.how_title.setStyleSheet("font-weight:bold;")
 
-        # 填充下拉框
+        # stats 卡片颜色和字体
+        self.stat_expected_frame.setStyleSheet("background:#f9fafb; border-radius:12px;")
+        self.stat_total_frame.setStyleSheet("background:#eff6ff; border-radius:12px;")
+        self.stat_passed_frame.setStyleSheet("background:#ecfdf3; border-radius:12px;")
+        self.stat_failed_frame.setStyleSheet("background:#fef2f2; border-radius:12px;")
+
+        for lbl in [
+            self.label_stat_expected,
+            self.label_stat_total,
+            self.label_stat_passed,
+            self.label_stat_failed,
+        ]:
+            lbl.setStyleSheet("color:#6b7280;")
+        for lbl in [
+            self.stat_expected_val,
+            self.stat_total_val,
+            self.stat_passed_val,
+            self.stat_failed_val,
+        ]:
+            lbl.setStyleSheet("font-size:20px; font-weight:bold;")
+        for lbl in [
+            self.label_stat_expected_unit,
+            self.label_stat_total_unit,
+            self.label_stat_passed_unit,
+            self.label_stat_failed_unit,
+        ]:
+            lbl.setStyleSheet("color:#9ca3af;")
+
+        # combobox 选项
         self.combo_expected.clear()
         for n in BATTERY_OPTIONS:
             txt = f"{n} Battery" if n == 1 else f"{n} Batteries"
             self.combo_expected.addItem(txt, n)
         self.combo_expected.setCurrentIndex(2)  # 默认 4
 
-        # 状态计数
+        # 统计计数
         self.proc = None
         self.log_thread = None
         self.total_inspected = 0
@@ -360,7 +381,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.cards_layout = self.findChild(QtWidgets.QGridLayout, "cardsLayout")
 
-        # 信号绑定
+        # 信号
         self.btn_start.clicked.connect(self.start_inspection)
         self.btn_stop.clicked.connect(self.stop_inspection)
         self.btn_stop_alarm.clicked.connect(self.stop_alarm)
@@ -369,11 +390,18 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.update_expected_stat()
 
-    # -------- 控制逻辑 --------
+    # ---- 控制逻辑 ----
 
     def update_expected_stat(self):
         expected = int(self.combo_expected.currentData())
         self.stat_expected_val.setText(str(expected))
+
+    def _update_pass_rate_label(self):
+        if self.total_inspected == 0:
+            rate = 0.0
+        else:
+            rate = self.total_pass * 100.0 / self.total_inspected
+        self.label_stat_passed_unit.setText(f"{rate:.1f}% rate")
 
     def start_inspection(self):
         if self.proc is not None:
@@ -403,8 +431,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 bufsize=1,
             )
         except FileNotFoundError:
-            QtWidgets.QMessageBox.critical(self, "Error",
-                                           "auto_capture.py not found at /home/pi/battery_batch/")
+            QtWidgets.QMessageBox.critical(
+                self, "Error",
+                "auto_capture.py not found at /home/pi/battery_batch/")
             self.proc = None
             return
 
@@ -446,7 +475,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stat_total_val.setText("0")
         self.stat_passed_val.setText("0")
         self.stat_failed_val.setText("0")
-        # 清空 result cards
+        self._update_pass_rate_label()
+        # 清空卡片
         while self.cards_layout.count():
             item = self.cards_layout.takeAt(0)
             w = item.widget()
@@ -465,6 +495,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.stat_total_val.setText(str(self.total_inspected))
         self.stat_passed_val.setText(str(self.total_pass))
         self.stat_failed_val.setText(str(self.total_fail))
+        self._update_pass_rate_label()
 
         if info.get("ng_count", 0) > 0:
             self.warning_frame.setVisible(True)
