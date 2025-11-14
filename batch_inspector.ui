@@ -14,7 +14,8 @@
    <string>Battery Package Inspection</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QHBoxLayout" name="horizontalLayout_main">
+   <!-- 整体垂直布局：上面 header，下面左右主内容 -->
+   <layout class="QVBoxLayout" name="mainVertical">
     <property name="leftMargin">
      <number>16</number>
     </property>
@@ -28,511 +29,539 @@
      <number>16</number>
     </property>
     <property name="spacing">
-     <number>16</number>
+     <number>12</number>
     </property>
-    <!-- LEFT PANEL : CONTROL -->
+    <!-- 顶部标题 Header -->
     <item>
-     <widget class="QFrame" name="controlCard">
+     <widget class="QFrame" name="header_frame">
       <property name="frameShape">
        <enum>QFrame::NoFrame</enum>
       </property>
-      <layout class="QVBoxLayout" name="verticalLayout_control">
+      <layout class="QVBoxLayout" name="verticalLayout_header">
        <property name="leftMargin">
-        <number>20</number>
+        <number>0</number>
        </property>
        <property name="topMargin">
-        <number>20</number>
+        <number>0</number>
        </property>
        <property name="rightMargin">
-        <number>20</number>
+        <number>0</number>
        </property>
        <property name="bottomMargin">
-        <number>20</number>
+        <number>0</number>
        </property>
        <property name="spacing">
-        <number>16</number>
+        <number>4</number>
        </property>
-       <!-- Control Panel Header -->
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_cpHeader">
+        <widget class="QLabel" name="title_main">
+         <property name="text">
+          <string>Battery Package Inspection</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignHCenter|Qt::AlignVCenter</set>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="title_sub">
+         <property name="text">
+          <string>Automated Quantity Verification System</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignHCenter|Qt::AlignVCenter</set>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <!-- 下面是主内容：左控制面板 + 右统计+结果 -->
+    <item>
+     <layout class="QHBoxLayout" name="horizontalLayout_main">
+      <property name="spacing">
+       <number>16</number>
+      </property>
+      <!-- LEFT PANEL : CONTROL -->
+      <item>
+       <widget class="QFrame" name="controlCard">
+        <property name="frameShape">
+         <enum>QFrame::NoFrame</enum>
+        </property>
+        <layout class="QVBoxLayout" name="verticalLayout_control">
+         <property name="leftMargin">
+          <number>20</number>
+         </property>
+         <property name="topMargin">
+          <number>20</number>
+         </property>
+         <property name="rightMargin">
+          <number>20</number>
+         </property>
+         <property name="bottomMargin">
+          <number>20</number>
+         </property>
+         <property name="spacing">
+          <number>16</number>
+         </property>
+         <!-- Control Panel Header -->
          <item>
-          <widget class="QLabel" name="label_cp_icon">
+          <layout class="QHBoxLayout" name="horizontalLayout_cpHeader">
+           <item>
+            <widget class="QLabel" name="label_cp_icon">
+             <property name="text">
+              <string>🖥️</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_cp_title">
+             <property name="text">
+              <string>Control Panel</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_cp">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+          </layout>
+         </item>
+         <!-- Batteries per package -->
+         <item>
+          <widget class="QLabel" name="label_bpp">
            <property name="text">
-            <string>🖥️</string>
+            <string>Batteries Per Package</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QLabel" name="label_cp_title">
+          <widget class="QComboBox" name="combo_expected"/>
+         </item>
+         <item>
+          <widget class="QLabel" name="hintExpected">
            <property name="text">
-            <string>Control Panel</string>
+            <string>Select the expected number of batteries in each package</string>
+           </property>
+          </widget>
+         </item>
+         <!-- Buttons -->
+         <item>
+          <widget class="QPushButton" name="btn_start">
+           <property name="minimumHeight">
+            <number>48</number>
+           </property>
+           <property name="text">
+            <string>▶  Start Inspection</string>
            </property>
           </widget>
          </item>
          <item>
-          <spacer name="horizontalSpacer_cp">
+          <widget class="QPushButton" name="btn_stop">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="minimumHeight">
+            <number>40</number>
+           </property>
+           <property name="text">
+            <string>■  Stop</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_stop_alarm">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="minimumHeight">
+            <number>40</number>
+           </property>
+           <property name="text">
+            <string>⏹  Stop Alarm</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btn_reset">
+           <property name="minimumHeight">
+            <number>36</number>
+           </property>
+           <property name="text">
+            <string>↻  Reset Counters</string>
+           </property>
+          </widget>
+         </item>
+         <!-- Warning box -->
+         <item>
+          <widget class="QFrame" name="warning_frame">
+           <property name="visible">
+            <bool>false</bool>
+           </property>
+           <property name="frameShape">
+            <enum>QFrame::NoFrame</enum>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_warning">
+            <property name="leftMargin">
+             <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>8</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>8</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="warning_title">
+              <property name="text">
+               <string>⚠ Battery Count Mismatch!</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="warning_msg">
+              <property name="text">
+               <string>Please check the package and resolve the issue.</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <!-- How it works -->
+         <item>
+          <widget class="QFrame" name="how_frame">
+           <property name="frameShape">
+            <enum>QFrame::NoFrame</enum>
+           </property>
+           <layout class="QVBoxLayout" name="verticalLayout_how">
+            <property name="leftMargin">
+             <number>10</number>
+            </property>
+            <property name="topMargin">
+             <number>8</number>
+            </property>
+            <property name="rightMargin">
+             <number>10</number>
+            </property>
+            <property name="bottomMargin">
+             <number>8</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="how_title">
+              <property name="text">
+               <string>How it works:</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="how_steps">
+              <property name="text">
+               <string>• Select batteries per package
+• Click Start to begin inspection
+• System detects and verifies each package
+• If mismatch detected, alarm sounds</string>
+              </property>
+              <property name="alignment">
+               <set>Qt::AlignLeft|Qt::AlignTop</set>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <spacer name="verticalSpacer_control">
            <property name="orientation">
-            <enum>Qt::Horizontal</enum>
+            <enum>Qt::Vertical</enum>
            </property>
            <property name="sizeHint" stdset="0">
             <size>
-             <width>40</width>
-             <height>20</height>
+             <width>20</width>
+             <height>40</height>
             </size>
            </property>
           </spacer>
          </item>
         </layout>
-       </item>
-       <!-- Batteries per package -->
-       <item>
-        <widget class="QLabel" name="label_bpp">
-         <property name="text">
-          <string>Batteries Per Package</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QComboBox" name="combo_expected"/>
-       </item>
-       <item>
-        <widget class="QLabel" name="hintExpected">
-         <property name="text">
-          <string>Select the expected number of batteries in each package</string>
-         </property>
-        </widget>
-       </item>
-       <!-- Buttons -->
-       <item>
-        <widget class="QPushButton" name="btn_start">
-         <property name="minimumHeight">
-          <number>48</number>
-         </property>
-         <property name="text">
-          <string>▶  Start Inspection</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="btn_stop">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="minimumHeight">
-          <number>40</number>
-         </property>
-         <property name="text">
-          <string>■  Stop</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="btn_stop_alarm">
-         <property name="enabled">
-          <bool>false</bool>
-         </property>
-         <property name="minimumHeight">
-          <number>40</number>
-         </property>
-         <property name="text">
-          <string>⏹  Stop Alarm</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="btn_reset">
-         <property name="minimumHeight">
-          <number>36</number>
-         </property>
-         <property name="text">
-          <string>↻  Reset Counters</string>
-         </property>
-        </widget>
-       </item>
-       <!-- Warning box -->
-       <item>
-        <widget class="QFrame" name="warning_frame">
-         <property name="visible">
-          <bool>false</bool>
-         </property>
-         <property name="frameShape">
-          <enum>QFrame::NoFrame</enum>
-         </property>
-         <layout class="QVBoxLayout" name="verticalLayout_warning">
-          <property name="leftMargin">
-           <number>10</number>
-          </property>
-          <property name="topMargin">
-           <number>8</number>
-          </property>
-          <property name="rightMargin">
-           <number>10</number>
-          </property>
-          <property name="bottomMargin">
-           <number>8</number>
-          </property>
-          <item>
-           <widget class="QLabel" name="warning_title">
-            <property name="text">
-             <string>⚠ Battery Count Mismatch!</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLabel" name="warning_msg">
-            <property name="text">
-             <string>Please check the package and resolve the issue.</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <!-- How it works -->
-       <item>
-        <widget class="QFrame" name="how_frame">
-         <property name="frameShape">
-          <enum>QFrame::NoFrame</enum>
-         </property>
-         <layout class="QVBoxLayout" name="verticalLayout_how">
-          <property name="leftMargin">
-           <number>10</number>
-          </property>
-          <property name="topMargin">
-           <number>8</number>
-          </property>
-          <property name="rightMargin">
-           <number>10</number>
-          </property>
-          <property name="bottomMargin">
-           <number>8</number>
-          </property>
-          <item>
-           <widget class="QLabel" name="how_title">
-            <property name="text">
-             <string>How it works:</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLabel" name="how_steps">
-            <property name="text">
-             <string>• Select batteries per package
-• Click Start to begin inspection
-• System detects and verifies each package
-• If mismatch detected, alarm sounds</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignLeft|Qt::AlignTop</set>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
-        <spacer name="verticalSpacer_control">
-         <property name="orientation">
-          <enum>Qt::Vertical</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>20</width>
-           <height>40</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-      </layout>
-     </widget>
-    </item>
-    <!-- RIGHT SIDE : HEADER + STATS + RESULTS -->
-    <item>
-     <layout class="QVBoxLayout" name="verticalLayout_right">
-      <property name="spacing">
-       <number>12</number>
-      </property>
-      <!-- Header -->
+       </widget>
+      </item>
+      <!-- RIGHT SIDE : stats + results -->
       <item>
-       <layout class="QVBoxLayout" name="verticalLayout_header">
+       <layout class="QVBoxLayout" name="verticalLayout_right">
+        <property name="spacing">
+         <number>12</number>
+        </property>
+        <!-- Stats card -->
         <item>
-         <widget class="QLabel" name="title_main">
-          <property name="text">
-           <string>Battery Package Inspection</string>
+         <widget class="QFrame" name="stats_card">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
           </property>
-          <property name="alignment">
-           <set>Qt::AlignHCenter|Qt::AlignVCenter</set>
-          </property>
+          <layout class="QHBoxLayout" name="horizontalLayout_stats">
+           <property name="leftMargin">
+            <number>16</number>
+           </property>
+           <property name="topMargin">
+            <number>12</number>
+           </property>
+           <property name="rightMargin">
+            <number>16</number>
+           </property>
+           <property name="bottomMargin">
+            <number>12</number>
+           </property>
+           <property name="spacing">
+            <number>12</number>
+           </property>
+           <!-- Expected -->
+           <item>
+            <widget class="QFrame" name="stat_expected_frame">
+             <layout class="QVBoxLayout" name="verticalLayout_expected">
+              <property name="leftMargin">
+               <number>12</number>
+              </property>
+              <property name="topMargin">
+               <number>8</number>
+              </property>
+              <property name="rightMargin">
+               <number>12</number>
+              </property>
+              <property name="bottomMargin">
+               <number>8</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="label_stat_expected">
+                <property name="text">
+                 <string>Expected</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="stat_expected_val">
+                <property name="text">
+                 <string>0</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_stat_expected_unit">
+                <property name="text">
+                 <string>batteries/pkg</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <!-- Total -->
+           <item>
+            <widget class="QFrame" name="stat_total_frame">
+             <layout class="QVBoxLayout" name="verticalLayout_total">
+              <property name="leftMargin">
+               <number>12</number>
+              </property>
+              <property name="topMargin">
+               <number>8</number>
+              </property>
+              <property name="rightMargin">
+               <number>12</number>
+              </property>
+              <property name="bottomMargin">
+               <number>8</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="label_stat_total">
+                <property name="text">
+                 <string>Total</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="stat_total_val">
+                <property name="text">
+                 <string>0</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_stat_total_unit">
+                <property name="text">
+                 <string>inspected</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <!-- Passed -->
+           <item>
+            <widget class="QFrame" name="stat_passed_frame">
+             <layout class="QVBoxLayout" name="verticalLayout_passed">
+              <property name="leftMargin">
+               <number>12</number>
+              </property>
+              <property name="topMargin">
+               <number>8</number>
+              </property>
+              <property name="rightMargin">
+               <number>12</number>
+              </property>
+              <property name="bottomMargin">
+               <number>8</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="label_stat_passed">
+                <property name="text">
+                 <string>Passed</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="stat_passed_val">
+                <property name="text">
+                 <string>0</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_stat_passed_unit">
+                <property name="text">
+                 <string>0.0% rate</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+           <!-- Failed -->
+           <item>
+            <widget class="QFrame" name="stat_failed_frame">
+             <layout class="QVBoxLayout" name="verticalLayout_failed">
+              <property name="leftMargin">
+               <number>12</number>
+              </property>
+              <property name="topMargin">
+               <number>8</number>
+              </property>
+              <property name="rightMargin">
+               <number>12</number>
+              </property>
+              <property name="bottomMargin">
+               <number>8</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="label_stat_failed">
+                <property name="text">
+                 <string>Failed</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="stat_failed_val">
+                <property name="text">
+                 <string>0</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QLabel" name="label_stat_failed_unit">
+                <property name="text">
+                 <string>defects</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </item>
+          </layout>
          </widget>
         </item>
+        <!-- Results card -->
         <item>
-         <widget class="QLabel" name="title_sub">
-          <property name="text">
-           <string>Automated Quantity Verification System</string>
+         <widget class="QFrame" name="results_card">
+          <property name="frameShape">
+           <enum>QFrame::NoFrame</enum>
           </property>
-          <property name="alignment">
-           <set>Qt::AlignHCenter|Qt::AlignVCenter</set>
-          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_results">
+           <property name="leftMargin">
+            <number>16</number>
+           </property>
+           <property name="topMargin">
+            <number>12</number>
+           </property>
+           <property name="rightMargin">
+            <number>16</number>
+           </property>
+           <property name="bottomMargin">
+            <number>12</number>
+           </property>
+           <property name="spacing">
+            <number>8</number>
+           </property>
+           <item>
+            <widget class="QLabel" name="label_results_title">
+             <property name="text">
+              <string>Inspection Results</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QLabel" name="empty_label">
+             <property name="text">
+              <string>No inspections yet
+Click &quot;Start Inspection&quot; to begin</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QScrollArea" name="scroll">
+             <property name="widgetResizable">
+              <bool>true</bool>
+             </property>
+             <widget class="QWidget" name="resultsContainer">
+              <layout class="QGridLayout" name="cardsLayout">
+               <property name="leftMargin">
+                <number>4</number>
+               </property>
+               <property name="topMargin">
+                <number>4</number>
+               </property>
+               <property name="rightMargin">
+                <number>4</number>
+               </property>
+               <property name="bottomMargin">
+                <number>4</number>
+               </property>
+               <property name="horizontalSpacing">
+                <number>12</number>
+               </property>
+               <property name="verticalSpacing">
+                <number>12</number>
+               </property>
+              </layout>
+             </widget>
+            </widget>
+           </item>
+          </layout>
          </widget>
         </item>
        </layout>
-      </item>
-      <!-- Stats card -->
-      <item>
-       <widget class="QFrame" name="stats_card">
-        <property name="frameShape">
-         <enum>QFrame::NoFrame</enum>
-        </property>
-        <layout class="QHBoxLayout" name="horizontalLayout_stats">
-         <property name="leftMargin">
-          <number>16</number>
-         </property>
-         <property name="topMargin">
-          <number>12</number>
-         </property>
-         <property name="rightMargin">
-          <number>16</number>
-         </property>
-         <property name="bottomMargin">
-          <number>12</number>
-         </property>
-         <property name="spacing">
-          <number>12</number>
-         </property>
-         <!-- Expected -->
-         <item>
-          <widget class="QFrame" name="stat_expected_frame">
-           <layout class="QVBoxLayout" name="verticalLayout_expected">
-            <property name="leftMargin">
-             <number>12</number>
-            </property>
-            <property name="topMargin">
-             <number>8</number>
-            </property>
-            <property name="rightMargin">
-             <number>12</number>
-            </property>
-            <property name="bottomMargin">
-             <number>8</number>
-            </property>
-            <item>
-             <widget class="QLabel" name="label_stat_expected">
-              <property name="text">
-               <string>Expected</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="stat_expected_val">
-              <property name="text">
-               <string>0</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="label_stat_expected_unit">
-              <property name="text">
-               <string>batteries/pkg</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
-         </item>
-         <!-- Total -->
-         <item>
-          <widget class="QFrame" name="stat_total_frame">
-           <layout class="QVBoxLayout" name="verticalLayout_total">
-            <property name="leftMargin">
-             <number>12</number>
-            </property>
-            <property name="topMargin">
-             <number>8</number>
-            </property>
-            <property name="rightMargin">
-             <number>12</number>
-            </property>
-            <property name="bottomMargin">
-             <number>8</number>
-            </property>
-            <item>
-             <widget class="QLabel" name="label_stat_total">
-              <property name="text">
-               <string>Total</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="stat_total_val">
-              <property name="text">
-               <string>0</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="label_stat_total_unit">
-              <property name="text">
-               <string>inspected</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
-         </item>
-         <!-- Passed -->
-         <item>
-          <widget class="QFrame" name="stat_passed_frame">
-           <layout class="QVBoxLayout" name="verticalLayout_passed">
-            <property name="leftMargin">
-             <number>12</number>
-            </property>
-            <property name="topMargin">
-             <number>8</number>
-            </property>
-            <property name="rightMargin">
-             <number>12</number>
-            </property>
-            <property name="bottomMargin">
-             <number>8</number>
-            </property>
-            <item>
-             <widget class="QLabel" name="label_stat_passed">
-              <property name="text">
-               <string>Passed</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="stat_passed_val">
-              <property name="text">
-               <string>0</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="label_stat_passed_unit">
-              <property name="text">
-               <string>rate</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
-         </item>
-         <!-- Failed -->
-         <item>
-          <widget class="QFrame" name="stat_failed_frame">
-           <layout class="QVBoxLayout" name="verticalLayout_failed">
-            <property name="leftMargin">
-             <number>12</number>
-            </property>
-            <property name="topMargin">
-             <number>8</number>
-            </property>
-            <property name="rightMargin">
-             <number>12</number>
-            </property>
-            <property name="bottomMargin">
-             <number>8</number>
-            </property>
-            <item>
-             <widget class="QLabel" name="label_stat_failed">
-              <property name="text">
-               <string>Failed</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="stat_failed_val">
-              <property name="text">
-               <string>0</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="label_stat_failed_unit">
-              <property name="text">
-               <string>defects</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
-         </item>
-        </layout>
-       </widget>
-      </item>
-      <!-- Results -->
-      <item>
-       <widget class="QFrame" name="results_card">
-        <property name="frameShape">
-         <enum>QFrame::NoFrame</enum>
-        </property>
-        <layout class="QVBoxLayout" name="verticalLayout_results">
-         <property name="leftMargin">
-          <number>16</number>
-         </property>
-         <property name="topMargin">
-          <number>12</number>
-         </property>
-         <property name="rightMargin">
-          <number>16</number>
-         </property>
-         <property name="bottomMargin">
-          <number>12</number>
-         </property>
-         <property name="spacing">
-          <number>8</number>
-         </property>
-         <item>
-          <widget class="QLabel" name="label_results_title">
-           <property name="text">
-            <string>Inspection Results</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLabel" name="empty_label">
-           <property name="text">
-            <string>No inspections yet
-Click &quot;Start Inspection&quot; to begin</string>
-           </property>
-           <property name="alignment">
-            <set>Qt::AlignCenter</set>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QScrollArea" name="scroll">
-           <property name="widgetResizable">
-            <bool>true</bool>
-           </property>
-           <widget class="QWidget" name="resultsContainer">
-            <layout class="QGridLayout" name="cardsLayout">
-             <property name="leftMargin">
-              <number>4</number>
-             </property>
-             <property name="topMargin">
-              <number>4</number>
-             </property>
-             <property name="rightMargin">
-              <number>4</number>
-             </property>
-             <property name="bottomMargin">
-              <number>4</number>
-             </property>
-             <property name="horizontalSpacing">
-              <number>12</number>
-             </property>
-             <property name="verticalSpacing">
-              <number>12</number>
-             </property>
-            </layout>
-           </widget>
-          </widget>
-         </item>
-        </layout>
-       </widget>
       </item>
      </layout>
     </item>
