@@ -1,4 +1,5 @@
 # auto_capture.py
+# VERSION: 2024-11-17-v3-BUGFIX
 import os, time, cv2, json, glob, subprocess, warnings, argparse, threading, signal, atexit, sys
 from datetime import datetime
 from picamera2 import Picamera2
@@ -127,55 +128,63 @@ def run_detection(img_path, base, expected):
         print(f"⚠️ Failed to read JSON: {e}", flush=True)
     return ng, json_path
 
-def _ensure_buzzer_ready(pin: int):
+def _create_fresh_buzzer(pin: int):
     """
-    确保蜂鸣器可用：每次都重新创建，避免 GPIO 状态问题
-    
-    关键修复：
-    - 总是先关闭旧的 buzzer
-    - 然后创建新的 buzzer
-    - 做一次快速自检
+    === 核心修复函数 ===
+    每次调用都创建全新的蜂鸣器实例
+    这是解决重启后蜂鸣器不响的关键！
     """
     global _BUZZER
     
-    # 先关闭旧的（如果有）
+    print(f"[BuzzerFix] === Starting fresh buzzer creation on GPIO {pin} ===", flush=True)
+    
+    # 步骤 1: 彻底关闭旧实例
     if _BUZZER is not None:
+        print("[BuzzerFix] Step 1: Closing old buzzer instance...", flush=True)
         try:
-            print("[Buzzer] Closing old buzzer instance...", flush=True)
-            _BUZZER.close()
+            _BUZZER.off()  # 先拉低
+            time.sleep(0.05)
+            _BUZZER.close()  # 释放 GPIO
+            print("[BuzzerFix] Old buzzer closed successfully", flush=True)
         except Exception as e:
-            print(f"[Buzzer] Error closing old buzzer: {e}", flush=True)
+            print(f"[BuzzerFix] Warning: Error closing old buzzer: {e}", flush=True)
         finally:
             _BUZZER = None
+    else:
+        print("[BuzzerFix] Step 1: No old buzzer to close", flush=True)
     
-    # 等待一下，让 GPIO 完全释放
-    time.sleep(0.1)
+    # 步骤 2: 等待 GPIO 完全释放
+    print("[BuzzerFix] Step 2: Waiting for GPIO to release...", flush=True)
+    time.sleep(0.15)
     
-    # 创建新的
+    # 步骤 3: 创建新实例
+    print(f"[BuzzerFix] Step 3: Creating NEW buzzer on GPIO {pin}...", flush=True)
     try:
-        print(f"[Buzzer] Creating new buzzer on GPIO {pin}...", flush=True)
         _BUZZER = Buzzer(pin=pin, active_high=True)
+        print("[BuzzerFix] New buzzer created successfully!", flush=True)
         
-        # 快速自检：短促响一下
+        # 步骤 4: 自检测试
+        print("[BuzzerFix] Step 4: Running self-test...", flush=True)
         try:
             _BUZZER.on()
-            time.sleep(0.05)
+            time.sleep(0.08)  # 稍微长一点，确保能听到
             _BUZZER.off()
-            print("[Buzzer] Self-test passed (short beep)", flush=True)
+            print("[BuzzerFix] ✓ Self-test PASSED (you should have heard a short beep)", flush=True)
         except Exception as e:
-            print(f"[Buzzer] Self-test failed: {e}", flush=True)
+            print(f"[BuzzerFix] ✗ Self-test FAILED: {e}", flush=True)
             
     except Exception as e:
-        print(f"⚠️ Failed to create buzzer: {e}", flush=True)
+        print(f"[BuzzerFix] ✗✗✗ CRITICAL ERROR: Failed to create buzzer: {e}", flush=True)
         _BUZZER = None
+        
+    print(f"[BuzzerFix] === Buzzer creation complete. Ready: {_BUZZER is not None} ===", flush=True)
+    return _BUZZER is not None
 
 def alarm_continuous_loop(bz: Buzzer, stop_evt: threading.Event):
-    """
-    持续报警：保持 ON，直到 stop_evt 置位；最后确保 OFF。
-    """
+    """持续报警：保持 ON，直到 stop_evt 置位"""
     try:
         bz.on()
-        print("[Alarm] Buzzer ON - continuous alarm started", flush=True)
+        print("[Alarm] 🔊🔊🔊 Buzzer ON - continuous alarm started 🔊🔊🔊", flush=True)
         while not stop_evt.is_set():
             time.sleep(0.05)
     except Exception as e:
@@ -183,26 +192,17 @@ def alarm_continuous_loop(bz: Buzzer, stop_evt: threading.Event):
     finally:
         try:
             bz.off()
-            print("[Alarm] Buzzer OFF - alarm stopped", flush=True)
+            print("[Alarm] 🔇 Buzzer OFF - alarm stopped 🔇", flush=True)
         except Exception:
             pass
 
 def wait_enter_from_gui(stop_evt: threading.Event, timeout_sec: float = 300.0):
-    """
-    改进版：通过持续检查 stdin 来等待 GUI 的停止信号
-    
-    关键改进：
-    1. 使用非阻塞模式读取 stdin
-    2. 添加超时保护（默认 5 分钟）
-    3. 更好的错误处理
-    4. 定期检查 stop_evt 和 shutdown flag
-    """
+    """等待 GUI 发送停止信号"""
     global _SHUTDOWN_FLAG
     
     print("[WaitAlarm] Waiting for stop signal from GUI...", flush=True)
     start_time = time.time()
     
-    # 设置 stdin 为非阻塞模式
     import fcntl
     stdin_fd = sys.stdin.fileno()
     old_flags = fcntl.fcntl(stdin_fd, fcntl.F_GETFL)
@@ -210,13 +210,11 @@ def wait_enter_from_gui(stop_evt: threading.Event, timeout_sec: float = 300.0):
     
     try:
         while not stop_evt.is_set() and not _SHUTDOWN_FLAG:
-            # 检查超时
             if time.time() - start_time > timeout_sec:
                 print("[WaitAlarm] Timeout reached, stopping alarm", flush=True)
                 break
             
             try:
-                # 尝试非阻塞读取
                 data = sys.stdin.read(1024)
                 if data:
                     print(f"[WaitAlarm] Received data from stdin: {repr(data)}", flush=True)
@@ -224,13 +222,10 @@ def wait_enter_from_gui(stop_evt: threading.Event, timeout_sec: float = 300.0):
                         print("[WaitAlarm] Stop signal received (newline)", flush=True)
                         break
                 else:
-                    # 空数据，继续等待
                     time.sleep(0.1)
             except BlockingIOError:
-                # 没有数据可读，继续等待
                 time.sleep(0.1)
             except (IOError, OSError) as e:
-                # stdin 可能被关闭或其他错误
                 print(f"[WaitAlarm] stdin read error: {e}, continuing...", flush=True)
                 time.sleep(0.2)
             except Exception as e:
@@ -238,7 +233,6 @@ def wait_enter_from_gui(stop_evt: threading.Event, timeout_sec: float = 300.0):
                 time.sleep(0.2)
                 
     finally:
-        # 恢复 stdin 的阻塞模式
         try:
             fcntl.fcntl(stdin_fd, fcntl.F_SETFL, old_flags)
         except Exception:
@@ -267,6 +261,11 @@ def _cleanup_outputs(keep_raw, keep_out):
 
 def main():
     global _ALARM_THREAD, _ALARM_STOP_EVT
+    
+    print("=" * 60, flush=True)
+    print("VERSION: 2024-11-17-v3-BUGFIX", flush=True)
+    print("=" * 60, flush=True)
+    
     args = parse_args()
 
     expected = args.expected
@@ -306,12 +305,14 @@ def main():
                 print(f"[Main] Detection complete: NG count = {ng}", flush=True)
 
                 if ng > 0 and buzzer_pin:
-                    print("[Main] NG detected, starting alarm...", flush=True)
+                    print("[Main] ⚠️⚠️⚠️ NG detected, starting alarm... ⚠️⚠️⚠️", flush=True)
                     
-                    # 【关键修复】每次都重新创建蜂鸣器，确保 GPIO 状态正确
-                    _ensure_buzzer_ready(buzzer_pin)
+                    # ============ 核心修复：每次都重新创建蜂鸣器 ============
+                    buzzer_ready = _create_fresh_buzzer(buzzer_pin)
                     
-                    if _BUZZER is not None:
+                    if buzzer_ready and _BUZZER is not None:
+                        print("[Main] Buzzer ready, starting alarm thread...", flush=True)
+                        
                         # 停止旧报警（如果有）
                         _alarm_quietly()
                         
@@ -323,7 +324,7 @@ def main():
                             daemon=True
                         )
                         _ALARM_THREAD.start()
-                        print("🔴 Alarm started! Waiting for GUI stop signal...", flush=True)
+                        print("🔴 Alarm thread started! You should hear continuous beeping now!", flush=True)
 
                         # 等待 GUI 发送停止信号
                         wait_enter_from_gui(_ALARM_STOP_EVT)
@@ -332,7 +333,7 @@ def main():
                         _alarm_quietly()
                         print("🔕 Alarm stopped by GUI", flush=True)
                     else:
-                        print("⚠️ Buzzer not available, skipping alarm", flush=True)
+                        print("⚠️⚠️⚠️ BUZZER NOT AVAILABLE - NO ALARM WILL SOUND ⚠️⚠️⚠️", flush=True)
                 else:
                     # 无 NG：确保没有残留报警线程
                     _alarm_quietly()
