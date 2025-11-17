@@ -1,10 +1,3 @@
-# ================================
-# factory_gui.py  (drop-in)
-# 关键点：
-# 1) NG 报警时禁用 Stop，只允许 Stop Alarm。
-# 2) Stop 时做一次 failsafe 拉低并关闭 GPIO。
-# 3) Start 前清理 UI 状态，确保下一次 NG 能再次触发报警。
-# ================================
 import os, sys, json, signal, subprocess
 from datetime import datetime
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
@@ -82,7 +75,8 @@ class LogReaderThread(QtCore.QThread):
         p=self._process; current=None; jpath=None
         while True:
             line=p.stdout.readline()
-            if not line: break
+            if not line:
+                break
             s=line.strip()
             if s.startswith("Image: "):
                 current = s.split("Image:",1)[1].strip()
@@ -165,7 +159,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.proc=subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, text=True, bufsize=1)
         except FileNotFoundError:
             QtWidgets.QMessageBox.critical(self,"Error","auto_capture.py not found at /home/pi/battery_batch/"); self.proc=None; return
-        self.log_thread=LogReaderThread(self.proc, expected); self.log_thread.newResult.connect(self.on_new_result); self.log_thread.processExited.connect(self.on_process_exited); self.log_thread.start()
+        self.log_thread=LogReaderThread(self.proc, expected)
+        self.log_thread.newResult.connect(self.on_new_result)
+        self.log_thread.processExited.connect(self.on_process_exited)
+        self.log_thread.start()
         self.btn_start.setEnabled(False); self.combo_expected.setEnabled(False); self.btn_stop.setEnabled(True); self.warning_frame.setVisible(False)
         # 确保开始时不在报警状态
         self.alarm_active = False
@@ -188,12 +185,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
         if self.proc is None: return
         try:
+            # 给子进程一个“可能的回车”，如果它正处于等待（不是则忽略）
             try:
                 if self.proc.stdin: self.proc.stdin.write("\n"); self.proc.stdin.flush()
             except Exception: pass
-            try: self.proc.send_signal(signal.SIGINT)
+            try:
+                self.proc.send_signal(signal.SIGINT)
             except Exception: pass
-            try: self.proc.wait(timeout=1.2)
+            try:
+                self.proc.wait(timeout=1.2)
             except subprocess.TimeoutExpired:
                 try: self.proc.terminate()
                 except Exception: pass
@@ -218,7 +218,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.proc.stdin.write("\n"); self.proc.stdin.flush()
         except Exception:
             pass
-        # UI 状态复位
         self.alarm_active = False
         self.btn_stop_alarm.setEnabled(False)
         self.warning_frame.setVisible(False)
@@ -247,7 +246,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self.btn_stop_alarm.setEnabled(True)
             self.btn_stop.setEnabled(False)
         else:
-            # 没有 NG：清警示，恢复按钮
             self.warning_frame.setVisible(False)
             self.alarm_active = False
             self.btn_stop_alarm.setEnabled(False)
@@ -267,7 +265,6 @@ class MainWindow(QtWidgets.QMainWindow):
         DetailDialog(info, self).exec_()
 
     def closeEvent(self, e):
-        # 若还在报警，先提示关报警
         if self.alarm_active:
             self.stop_alarm()
         try: self.stop_inspection()
