@@ -32,11 +32,11 @@ class ResultCard(QtWidgets.QFrame):
         badge.setStyleSheet("background:%s;color:white;border-radius:10px;font-weight:bold;padding:2px 6px;" % ("#22c55e" if ng==0 else "#ef4444"))
         badge.move(self.width()-badge.width()-8,8); badge.raise_(); self._badge=badge
         if info.get("image_path") and os.path.exists(info["image_path"]):
-            p = QtGui.QPixmap(info["image_path"]); 
+            p = QtGui.QPixmap(info["image_path"])
             if not p.isNull(): self.set_image(p)
     def resizeEvent(self, e): super().resizeEvent(e); self._badge.move(self.width()-self._badge.width()-8,8)
     def set_image(self, p): size=self.imageLabel.size() or QtCore.QSize(220,120); self.imageLabel.setPixmap(p.scaled(size, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
-    def mousePressEvent(self, e): 
+    def mousePressEvent(self, e):
         if e.button()==QtCore.Qt.LeftButton: self.clicked.emit(self.info)
         super().mousePressEvent(e)
 
@@ -53,7 +53,7 @@ class DetailDialog(QtWidgets.QDialog):
         imgf = QtWidgets.QFrame(); imgf.setStyleSheet("background:white;border-radius:12px;"); il = QtWidgets.QVBoxLayout(imgf); il.setContentsMargins(8,8,8,8)
         img = QtWidgets.QLabel(alignment=QtCore.Qt.AlignCenter); img.setMinimumSize(400,260); img.setStyleSheet("background:#0b1120;border-radius:10px;"); il.addWidget(img); lay.addWidget(imgf)
         if info.get("image_path") and os.path.exists(info["image_path"]):
-            p = QtGui.QPixmap(info["image_path"]); 
+            p = QtGui.QPixmap(info["image_path"])
             if not p.isNull(): img.setPixmap(p.scaled(QtCore.QSize(480,320), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
         inf = QtWidgets.QFrame(); inf.setStyleSheet("background:white;border-radius:12px;"); grid = QtWidgets.QGridLayout(inf); grid.setContentsMargins(12,8,12,8); grid.setHorizontalSpacing(32)
         exp, ng, pc = info.get("expected",0), info.get("ng_count",0), info.get("pack_count",0)
@@ -77,11 +77,14 @@ class LogReaderThread(QtCore.QThread):
             line=p.stdout.readline()
             if not line: break
             s=line.strip()
-            if s.startswith("Image: "): current = s.split("Image:",1)[1].strip()
-            elif s.startswith("JSON:"): jpath = s.split("JSON:",1)[1].strip(); info=self._build_info(current,jpath); 
-            if jpath:
-                if info: self.newResult.emit(info)
-                current=None; jpath=None
+            if s.startswith("Image: "):
+                current = s.split("Image:",1)[1].strip()
+            elif s.startswith("JSON:"):
+                jpath = s.split("JSON:",1)[1].strip()
+                info=self._build_info(current,jpath)
+                if jpath:
+                    if info: self.newResult.emit(info)
+                    current=None; jpath=None
         p.wait(); self.processExited.emit(p.returncode)
     def _build_info(self, image_path, json_path):
         if not image_path: return None
@@ -127,6 +130,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.total_inspected=self.total_pass=self.total_fail=0
         self.cards_layout=self.findChild(QtWidgets.QGridLayout,"cardsLayout")
 
+        # 新增：报警状态锁
+        self.alarm_active = False
+
         self.btn_start.clicked.connect(self.start_inspection)
         self.btn_stop.clicked.connect(self.stop_inspection)
         self.btn_stop_alarm.clicked.connect(self.stop_alarm)
@@ -134,6 +140,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.combo_expected.currentIndexChanged.connect(self.update_expected_stat)
 
         self.update_expected_stat()
+        self.btn_stop_alarm.setEnabled(False)  # 初始禁用
 
     # --- 控制 ---
     def update_expected_stat(self):
@@ -153,6 +160,9 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self,"Error","auto_capture.py not found at /home/pi/battery_batch/"); self.proc=None; return
         self.log_thread=LogReaderThread(self.proc, expected); self.log_thread.newResult.connect(self.on_new_result); self.log_thread.processExited.connect(self.on_process_exited); self.log_thread.start()
         self.btn_start.setEnabled(False); self.combo_expected.setEnabled(False); self.btn_stop.setEnabled(True); self.warning_frame.setVisible(False)
+        # 确保开始时不在报警状态
+        self.alarm_active = False
+        self.btn_stop_alarm.setEnabled(False)
 
     def _failsafe_gpio_off(self):
         # 只在 Stop/关闭窗口调用；Stop Alarm 不触GPIO，避免与子进程竞态
@@ -164,6 +174,11 @@ class MainWindow(QtWidgets.QMainWindow):
             pass
 
     def stop_inspection(self):
+        # 禁止在报警期间按 Stop
+        if self.alarm_active:
+            QtWidgets.QMessageBox.warning(self, "Alarm active", "请先点击『Stop Alarm』静音报警，再停止流程。")
+            return
+
         if self.proc is None: return
         try:
             try:
@@ -187,14 +202,20 @@ class MainWindow(QtWidgets.QMainWindow):
             self.proc=None
             self.btn_start.setEnabled(True); self.combo_expected.setEnabled(True)
             self.btn_stop.setEnabled(False); self.btn_stop_alarm.setEnabled(False); self.warning_frame.setVisible(False)
+            self.alarm_active = False
 
     def stop_alarm(self):
+        # 仅通知子进程停报警（stdin 回车），不触GPIO；恢复 Stop 的可用性
         if self.proc is None: return
-        # 仅通知子进程停报警（stdin 回车），不触GPIO，避免把下一次报警“关死”
         try:
             self.proc.stdin.write("\n"); self.proc.stdin.flush()
-        except Exception: pass
-        self.btn_stop_alarm.setEnabled(False); self.warning_frame.setVisible(False)
+        except Exception:
+            pass
+        # UI 状态复位
+        self.alarm_active = False
+        self.btn_stop_alarm.setEnabled(False)
+        self.warning_frame.setVisible(False)
+        self.btn_stop.setEnabled(True)
 
     def reset_counters(self):
         self.total_inspected=self.total_pass=self.total_fail=0
@@ -211,8 +232,20 @@ class MainWindow(QtWidgets.QMainWindow):
         if info.get("ng_count",0)==0: self.total_pass += 1
         else: self.total_fail += 1
         self.stat_total_val.setText(str(self.total_inspected)); self.stat_passed_val.setText(str(self.total_pass)); self.stat_failed_val.setText(str(self.total_fail)); self._update_pass_rate_label()
-        if info.get("ng_count",0)>0: self.warning_frame.setVisible(True); self.btn_stop_alarm.setEnabled(True)
-        else: self.warning_frame.setVisible(False)
+
+        if info.get("ng_count",0)>0:
+            # 报警状态：只允许 Stop Alarm
+            self.warning_frame.setVisible(True)
+            self.alarm_active = True
+            self.btn_stop_alarm.setEnabled(True)
+            self.btn_stop.setEnabled(False)
+        else:
+            # 没有 NG：清警示，恢复按钮
+            self.warning_frame.setVisible(False)
+            self.alarm_active = False
+            self.btn_stop_alarm.setEnabled(False)
+            self.btn_stop.setEnabled(True if self.proc is not None else False)
+
         row=(self.total_inspected-1)//3; col=(self.total_inspected-1)%3
         card=ResultCard(info); card.clicked.connect(self.show_detail_dialog); self.cards_layout.addWidget(card,row,col); self.empty_label.setVisible(False)
 
@@ -221,11 +254,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.proc=None; self.log_thread=None
         self.btn_start.setEnabled(True); self.combo_expected.setEnabled(True)
         self.btn_stop.setEnabled(False); self.btn_stop_alarm.setEnabled(False); self.warning_frame.setVisible(False)
+        self.alarm_active = False
 
     def show_detail_dialog(self, info):
         DetailDialog(info, self).exec_()
 
     def closeEvent(self, e):
+        # 若还在报警，先提示关报警
+        if self.alarm_active:
+            self.stop_alarm()
         try: self.stop_inspection()
         except Exception: pass
         e.accept()
