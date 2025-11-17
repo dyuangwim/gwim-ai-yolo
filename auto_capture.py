@@ -128,29 +128,46 @@ def run_detection(img_path, base, expected):
     return ng, json_path
 
 def _ensure_buzzer_ready(pin: int):
-    """确保蜂鸣器可用：如已释放/异常，重新创建；做一次非常短的自检。"""
-    global _BUZZER
-    need_new = (_BUZZER is None)
+    """
+    确保蜂鸣器可用：每次都重新创建，避免 GPIO 状态问题
     
-    if not need_new:
+    关键修复：
+    - 总是先关闭旧的 buzzer
+    - 然后创建新的 buzzer
+    - 做一次快速自检
+    """
+    global _BUZZER
+    
+    # 先关闭旧的（如果有）
+    if _BUZZER is not None:
         try:
-            _BUZZER.off()
-        except Exception:
-            need_new = True
-            
-    if need_new:
-        try:
-            _BUZZER = Buzzer(pin=pin, active_high=True)
-            # 快速自检
-            try:
-                _BUZZER.on()
-                time.sleep(0.02)
-                _BUZZER.off()
-            except Exception:
-                pass
+            print("[Buzzer] Closing old buzzer instance...", flush=True)
+            _BUZZER.close()
         except Exception as e:
-            print(f"⚠️ Recreate buzzer failed: {e}", flush=True)
+            print(f"[Buzzer] Error closing old buzzer: {e}", flush=True)
+        finally:
             _BUZZER = None
+    
+    # 等待一下，让 GPIO 完全释放
+    time.sleep(0.1)
+    
+    # 创建新的
+    try:
+        print(f"[Buzzer] Creating new buzzer on GPIO {pin}...", flush=True)
+        _BUZZER = Buzzer(pin=pin, active_high=True)
+        
+        # 快速自检：短促响一下
+        try:
+            _BUZZER.on()
+            time.sleep(0.05)
+            _BUZZER.off()
+            print("[Buzzer] Self-test passed (short beep)", flush=True)
+        except Exception as e:
+            print(f"[Buzzer] Self-test failed: {e}", flush=True)
+            
+    except Exception as e:
+        print(f"⚠️ Failed to create buzzer: {e}", flush=True)
+        _BUZZER = None
 
 def alarm_continuous_loop(bz: Buzzer, stop_evt: threading.Event):
     """
@@ -269,8 +286,6 @@ def main():
     
     if buzzer_pin:
         print(f"🔔 Buzzer GPIO (BCM): {buzzer_pin}（有 NG 时将持续报警，GUI 点『Stop Alarm』静音）", flush=True)
-        # 预先初始化蜂鸣器
-        _ensure_buzzer_ready(buzzer_pin)
     else:
         print("🔔 No buzzer GPIO set (no ringing)", flush=True)
 
@@ -293,7 +308,7 @@ def main():
                 if ng > 0 and buzzer_pin:
                     print("[Main] NG detected, starting alarm...", flush=True)
                     
-                    # 确保蜂鸣器就绪
+                    # 【关键修复】每次都重新创建蜂鸣器，确保 GPIO 状态正确
                     _ensure_buzzer_ready(buzzer_pin)
                     
                     if _BUZZER is not None:
