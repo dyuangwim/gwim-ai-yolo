@@ -1,4 +1,6 @@
-# utils_hw.py
+# ================================
+# utils_hw.py  (drop-in)
+# ================================
 import time
 
 # 使用 gpiozero，在 Raspberry Pi 5 + python3-lgpio 环境下工作良好
@@ -65,7 +67,7 @@ class Buzzer:
             except Exception:
                 self.dev = None
 
-    # === 新增：显式 on/off，供外部“持续响/立即静音” ===
+    # === 显式 on/off，供外部“持续响/立即静音” ===
     def on(self):
         if self.dev is not None:
             try:
