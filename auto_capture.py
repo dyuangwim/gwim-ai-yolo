@@ -1,8 +1,5 @@
-# ================================
-# auto_capture.py  (drop-in)
-# 关键修复：Stop→Start 后，NG 不响的问题
-# ================================
-import os, sys, time, cv2, json, glob, subprocess, warnings, argparse, threading, signal, atexit, select
+# auto_capture.py
+import os, time, cv2, json, glob, subprocess, warnings, argparse, threading, signal, atexit, sys, select
 from datetime import datetime
 from picamera2 import Picamera2
 from gpiozero import DistanceSensor
@@ -26,7 +23,6 @@ _BUZZER = None                 # type: Buzzer | None
 _ALARM_THREAD = None           # type: threading.Thread | None
 _ALARM_STOP_EVT = None         # type: threading.Event | None
 
-
 def _alarm_quietly():
     """仅停止报警：停线程 + 拉低；不释放GPIO。"""
     global _ALARM_THREAD, _ALARM_STOP_EVT, _BUZZER
@@ -35,16 +31,13 @@ def _alarm_quietly():
         if _ALARM_THREAD and _ALARM_THREAD.is_alive(): _ALARM_THREAD.join(timeout=0.8)
     except Exception:
         pass
-    # 确保拉低
     try:
         if _BUZZER and hasattr(_BUZZER, "off"):
             _BUZZER.off()
     except Exception:
         pass
-    # 清理句柄
     _ALARM_THREAD = None
     _ALARM_STOP_EVT = None
-
 
 def _buzzer_close_all():
     """真正退出进程时调用：确保停报警并释放 GPIO。"""
@@ -57,7 +50,6 @@ def _buzzer_close_all():
     finally:
         _BUZZER = None
 
-
 def _handle_signal(signum, frame):
     _buzzer_close_all()
     raise SystemExit(0)
@@ -65,7 +57,6 @@ def _handle_signal(signum, frame):
 atexit.register(_buzzer_close_all)
 signal.signal(signal.SIGINT, _handle_signal)
 signal.signal(signal.SIGTERM, _handle_signal)
-
 
 def parse_args():
     ap = argparse.ArgumentParser("Ultrasonic-triggered auto capture + detect")
@@ -77,10 +68,8 @@ def parse_args():
     ap.add_argument("--keep_out", type=int, default=500)
     return ap.parse_args()
 
-
 def get_distance_cm():
     return sensor.distance * MAX_DISTANCE_M * 100.0
-
 
 def capture_image():
     picam2 = Picamera2()
@@ -94,9 +83,9 @@ def capture_image():
     picam2.stop(); picam2.close()
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
     base = f"auto_{ts}"; path = os.path.join(SAVE_DIR, f"{base}.jpg")
-    cv2.imwrite(path, bgr); print(f"📸 Captured: {path} ({CAM_W}x{CAM_H})")
+    cv2.imwrite(path, bgr)
+    print(f"Image: {path}")  # ★ 与 GUI 对齐
     return path, base
-
 
 def run_detection(img_path, base, expected):
     json_path = os.path.join(OUT_DIR, f"{base}.json")
@@ -107,16 +96,17 @@ def run_detection(img_path, base, expected):
         "--rotate", "0", "--out_dir", OUT_DIR, "--card_conf", "0.50",
         "--save_name", base,
     ]
-    print("🚀 Running detection..."); subprocess.run(cmd); print("✅ Detection finished.")
+    subprocess.run(cmd)
+    print(f"JSON: {json_path}")  # ★ 与 GUI 对齐
     ng = 0
     try:
-        with open(json_path, "r") as f: data = json.load(f)
-        packs = data.get("packs", []); ng = len([p for p in packs if not p.get("ok", True)])
-        print(f"📊 NG packs in this image: {ng}")
+        with open(json_path, "r") as f:
+            data = json.load(f)
+        packs = data.get("packs", [])
+        ng = len([p for p in packs if not p.get("ok", True)])
     except Exception as e:
         print("⚠️ Failed to read JSON:", e)
     return ng, json_path
-
 
 def _ensure_buzzer_ready(pin: int):
     """确保蜂鸣器可用：如已释放/异常，重新创建；做一次非常短的自检。"""
@@ -124,21 +114,19 @@ def _ensure_buzzer_ready(pin: int):
     need_new = (_BUZZER is None)
     if not need_new:
         try:
-            _BUZZER.off()   # 先确保是静音状态
+            _BUZZER.off()
         except Exception:
             need_new = True
     if need_new:
         try:
             _BUZZER = Buzzer(pin=pin, active_high=True)
-            # 极短自检，避免肉眼可感知的“自检哔一声”
             try:
-                _BUZZER.off()
+                _BUZZER.on(); time.sleep(0.02); _BUZZER.off()
             except Exception:
                 pass
         except Exception as e:
             print("⚠️ Recreate buzzer failed:", e)
             _BUZZER = None
-
 
 def alarm_continuous_loop(bz: Buzzer, stop_evt: threading.Event):
     """
@@ -149,52 +137,36 @@ def alarm_continuous_loop(bz: Buzzer, stop_evt: threading.Event):
         while not stop_evt.is_set():
             time.sleep(0.02)
     except Exception:
-        # 发生错误也确保拉低
         try: bz.off()
         except Exception: pass
         return
-    # 正常结束：拉低
     try: bz.off()
     except Exception: pass
 
-
-def _wait_enter_to_stop_alarm(max_seconds_if_eof: float = 8.0):
-    """兼容性：
-    - GUI 模式：stdin 是 pipe，readline() 可用；按 Stop Alarm 会写入"\n"。
-    - 如果 stdin 关闭（EOF）（曾导致“刚响立刻静音”）：不要立刻静音，给一个可听到的保底时长。
+def wait_enter_from_gui(stop_evt: threading.Event):
     """
-    global _ALARM_STOP_EVT
-    if _ALARM_STOP_EVT is None:
-        return  # 没有启动报警就返回
-
-    try:
-        # 如果有 fileno，可用 select 提前感知可读
-        fd = None
-        try:
-            fd = sys.stdin.fileno()
-        except Exception:
-            fd = None
-
-        if fd is not None:
-            # 等待用户回车
-            while not _ALARM_STOP_EVT.is_set():
-                r, _, _ = select.select([sys.stdin], [], [], 0.2)
-                if r:
-                    line = sys.stdin.readline()
-                    # 收到任意一行就停止
-                    break
+    代替 input() 的“等回车”：
+    - 通过 select 轮询 stdin（GUI 通过管道写入 '\n'）
+    - 即使遇到 EOF 也不会退出报警（防止 Stop/Start 后误触发）
+    """
+    fd = sys.stdin.fileno()
+    buf = ""
+    while not stop_evt.is_set():
+        r, _, _ = select.select([fd], [], [], 0.1)
+        if r:
+            try:
+                chunk = os.read(fd, 1024).decode("utf-8", errors="ignore")
+            except OSError:
+                chunk = ""
+            if chunk == "":
+                # 管道 EOF；不要停止报警，继续等待（交由 GUI 显式写入）
+                time.sleep(0.05)
+                continue
+            buf += chunk
+            if "\n" in buf:
+                break
         else:
-            # 无法获得 fd，退化为阻塞读；若 EOF 立刻抛异常
-            _ = sys.stdin.readline()
-    except Exception:
-        # 包含 EOFError 在内：保持一段时间再结束，避免“0ms 静音”
-        t0 = time.time()
-        while not _ALARM_STOP_EVT.is_set() and (time.time() - t0) < max_seconds_if_eof:
             time.sleep(0.05)
-    finally:
-        _alarm_quietly()
-        print("🔕 The alarm has been stopped.")
-
 
 def _cleanup_dir(path, pattern, keep_last):
     if keep_last <= 0: return
@@ -203,12 +175,10 @@ def _cleanup_dir(path, pattern, keep_last):
         try: os.remove(f)
         except Exception: pass
 
-
 def _cleanup_outputs(keep_raw, keep_out):
     _cleanup_dir(SAVE_DIR, "auto_*.jpg", keep_raw)
     for ext in ("*.jpg", "*.json", "*.csv"):
         _cleanup_dir(OUT_DIR, ext, keep_out)
-
 
 def main():
     global _ALARM_THREAD, _ALARM_STOP_EVT
@@ -225,29 +195,24 @@ def main():
 
     trig_cm = args.trigger_distance * 100.0; cooldown = args.cooldown
     buzzer_pin = args.buzzer_pin if args.buzzer_pin and args.buzzer_pin > 0 else None
-    if buzzer_pin: print(f"🔔 Buzzer GPIO (BCM): {buzzer_pin}（有 NG 时将持续报警，按 Enter 停止）")
+    if buzzer_pin: print(f"🔔 Buzzer GPIO (BCM): {buzzer_pin}（有 NG 时将持续报警，GUI 点『Stop Alarm』静音）")
     else:         print("🔔 No buzzer GPIO set (no ringing)")
-
-    # 开始前确保全局干净
-    _alarm_quietly()
-    _ensure_buzzer_ready(buzzer_pin) if buzzer_pin else None
 
     print("🟢 System ready. Waiting for object...")
     try:
         while True:
             d = get_distance_cm()
-            print(f"Distance: {d:5.1f} cm", end="\r")
+            # 控制台不刷屏太凶
+            time.sleep(0.15)
             if d < trig_cm:
-                print(f"\n📏 Object detected ({d:.1f} cm) → Capturing image...")
                 img, base = capture_image()
                 ng, _ = run_detection(img, base, expected)
                 _cleanup_outputs(args.keep_raw, args.keep_out)
 
                 if ng > 0 and buzzer_pin:
-                    print(f"❌ {ng} NG packages detected, continuous alert ON!")
                     _ensure_buzzer_ready(buzzer_pin)
                     if _BUZZER is not None:
-                        # 若上一次有残留，先确保停干净
+                        # 若有残留，先停干净
                         _alarm_quietly()
                         _ALARM_STOP_EVT = threading.Event()
                         _ALARM_THREAD = threading.Thread(
@@ -256,13 +221,18 @@ def main():
                             daemon=True
                         )
                         _ALARM_THREAD.start()
-                        # 等待 GUI 传入回车 / 或 EOF 退化等待
-                        _wait_enter_to_stop_alarm(max_seconds_if_eof=8.0)
 
-                print(f"⏸ Cooling {cooldown:.1f} s before next trigger...\n")
+                        # ★ 改为非阻塞轮询 stdin 的“等回车”
+                        wait_enter_from_gui(_ALARM_STOP_EVT)
+
+                        # 收到回车 → 停报警
+                        _alarm_quietly()
+                        print("🔕 The alarm has been stopped.")
+                else:
+                    # 无 NG：确保没有残留报警线程
+                    _alarm_quietly()
+
                 time.sleep(cooldown)
-            else:
-                time.sleep(0.2)
     except KeyboardInterrupt:
         print("\n🛑 Exited by user.")
     except SystemExit:
@@ -271,7 +241,6 @@ def main():
         print("\n❌ Error:", e)
     finally:
         _buzzer_close_all()
-
 
 if __name__ == "__main__":
     main()
