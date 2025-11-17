@@ -155,7 +155,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_start.setEnabled(False); self.combo_expected.setEnabled(False); self.btn_stop.setEnabled(True); self.warning_frame.setVisible(False)
 
     def _failsafe_gpio_off(self):
-        # 只在 Stop/关闭窗口调用；Stop Alarm 不调用这里，避免竞态
+        # 只在 Stop/关闭窗口调用；Stop Alarm 不触GPIO，避免与子进程竞态
         try:
             if SafeBuzzer is not None:
                 b=SafeBuzzer(pin=21, active_high=True)
