@@ -11,14 +11,14 @@ except Exception:
 
 class Trigger:
     """
-    光电/接近传感器触发（低电平/高电平均可配置）。
-    无硬件时退化为延时等待。
+    光电/接近传感器触发（低电平/高电平均可配置）。无硬件时退化为延时等待。
     """
     def __init__(self, pin: int = None, active_high: bool = True, debounce_ms: int = 60):
         self.pin = pin
         self.active_high = active_high
         self.debounce_ms = debounce_ms
         self.device = None
+
         if _HAS_GZ and pin is not None:
             pull_up = not active_high
             try:
@@ -31,6 +31,7 @@ class Trigger:
             if fallback_seconds > 0:
                 time.sleep(fallback_seconds)
             return True
+
         last = False
         stable_t = 0.0
         while True:
@@ -56,25 +57,34 @@ class Buzzer:
         self.pin = pin
         self.active_high = active_high
         self.dev = None
+
         if _HAS_GZ and pin is not None:
             try:
                 self.dev = GZBuzzer(pin, active_high=active_high)
-                self.off()   # 上电确保不响
+                self.off()   # 确保上电时不响
             except Exception:
                 self.dev = None
 
-    # 显式 on/off，让外部可“持续响/立即静音”
+    # === 新增：显式 on/off，供外部“持续响/立即静音” ===
     def on(self):
         if self.dev is not None:
-            try: self.dev.on()
-            except Exception: pass
+            try:
+                self.dev.on()
+            except Exception:
+                pass
 
     def off(self):
         if self.dev is not None:
-            try: self.dev.off()
-            except Exception: pass
+            try:
+                self.dev.off()
+            except Exception:
+                pass
 
     def beep(self, ms: int = 120):
+        """
+        蜂鸣器响 ms 毫秒。
+        如果没有硬件，则只 sleep，保证主流程不崩。
+        """
         if self.dev is None:
             time.sleep(ms / 1000.0)
             return
@@ -83,11 +93,12 @@ class Buzzer:
         self.off()
 
     def close(self):
-        # close 前强制拉低，避免留下“响”的电平
+        # 先确保拉低
         try:
             self.off()
         except Exception:
             pass
+        # 再释放
         if self.dev is not None:
             try:
                 self.dev.close()
