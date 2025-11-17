@@ -5,6 +5,7 @@ from datetime import datetime
 from picamera2 import Picamera2
 from gpiozero import DistanceSensor
 from gpiozero.input_devices import DistanceSensorNoEcho
+from gpiozero import LED as StatusLED 
 from utils_hw import Buzzer
 
 warnings.filterwarnings("ignore", category=DistanceSensorNoEcho)
@@ -24,6 +25,67 @@ _BUZZER = None
 _ALARM_THREAD = None
 _ALARM_STOP_EVT = None
 _SHUTDOWN_FLAG = False
+_STATUS_LED = None
+
+def _init_status_led(pin: int | None):
+    """
+    初始化状态 LED（拍照后闪烁用）
+    pin = None 或 pin < 0 表示不启用
+    """
+    global _STATUS_LED
+    if pin is None or pin < 0:
+        print("[LED] No status LED configured", flush=True)
+        _STATUS_LED = None
+        return
+
+    try:
+        _STATUS_LED = StatusLED(pin)
+        _STATUS_LED.off()
+        print(f"[LED] Status LED initialized on GPIO {pin}", flush=True)
+    except Exception as e:
+        print(f"[LED] Failed to init status LED on GPIO {pin}: {e}", flush=True)
+        _STATUS_LED = None
+
+
+def _led_blink(times: int = 2, on_ms: int = 120, off_ms: int = 120):
+    """
+    让状态 LED 闪几下，用于“拍照完成”提示。
+    """
+    global _STATUS_LED
+    if _STATUS_LED is None:
+        return
+
+    for i in range(times):
+        try:
+            _STATUS_LED.on()
+            time.sleep(on_ms / 1000.0)
+            _STATUS_LED.off()
+            time.sleep(off_ms / 1000.0)
+        except Exception as e:
+            print(f"[LED] Error while blinking: {e}", flush=True)
+            break
+
+
+def _led_close():
+    """
+    进程退出时关闭并释放 LED
+    """
+    global _STATUS_LED
+    if _STATUS_LED is None:
+        return
+
+    try:
+        _STATUS_LED.off()
+    except Exception:
+        pass
+
+    try:
+        _STATUS_LED.close()
+    except Exception:
+        pass
+
+    _STATUS_LED = None
+
 
 def _alarm_quietly():
     """仅停止报警：停线程 + 拉低；不释放GPIO。"""
@@ -56,6 +118,9 @@ def _buzzer_close_all():
     finally:
         _BUZZER = None
 
+    # ✅ 新增：同时释放 LED
+    _led_close()
+
 def _handle_signal(signum, frame):
     print(f"\n[Signal {signum}] Shutting down...", flush=True)
     _buzzer_close_all()
@@ -73,6 +138,9 @@ def parse_args():
     ap.add_argument("--cooldown", type=float, default=5.0)
     ap.add_argument("--keep_raw", type=int, default=200)
     ap.add_argument("--keep_out", type=int, default=500)
+    # ✅ 新增：LED 引脚（BCM 号），默认 20；传 -1 表示不用 LED
+    ap.add_argument("--led_pin", type=int, default=20,
+                    help="BCM pin for status LED (blink after capture); set -1 to disable")
     return ap.parse_args()
 
 def get_distance_cm():
@@ -268,6 +336,9 @@ def main():
     
     args = parse_args()
 
+    # ✅ 初始化状态 LED
+    _init_status_led(args.led_pin)
+
     expected = args.expected
     if expected <= 0:
         while True:
@@ -299,6 +370,10 @@ def main():
                 print(f"[Main] Object detected at {d:.2f}cm, capturing...", flush=True)
                 
                 img, base = capture_image()
+                
+                # ✅ 拍照完成 → 闪一下状态灯
+                _led_blink(times=2, on_ms=120, off_ms=120)
+        
                 ng, _ = run_detection(img, base, expected)
                 _cleanup_outputs(args.keep_raw, args.keep_out)
 
@@ -357,3 +432,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
