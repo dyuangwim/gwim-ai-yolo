@@ -2,7 +2,7 @@ import os, sys, json, signal, subprocess
 from datetime import datetime
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
 
-# 仅用于“Stop/关闭窗口时”的最终保险；Stop Alarm 不触GPIO
+# 仅用于“启动前预清 / Stop / 关闭窗口”的保险；Stop Alarm 不触 GPIO（避免与子进程竞态）
 try:
     from utils_hw import Buzzer as SafeBuzzer
 except Exception:
@@ -130,7 +130,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.total_inspected=self.total_pass=self.total_fail=0
         self.cards_layout=self.findChild(QtWidgets.QGridLayout,"cardsLayout")
 
-        # 新增：报警状态锁
+        # 报警状态锁：报警中禁用 Stop
         self.alarm_active = False
 
         self.btn_start.clicked.connect(self.start_inspection)
@@ -141,6 +141,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.update_expected_stat()
         self.btn_stop_alarm.setEnabled(False)  # 初始禁用
+        self.warning_frame.setVisible(False)
 
     # --- 控制 ---
     def update_expected_stat(self):
@@ -150,22 +151,8 @@ class MainWindow(QtWidgets.QMainWindow):
         rate=0.0 if self.total_inspected==0 else self.total_pass*100.0/self.total_inspected
         self.label_stat_passed_unit.setText(f"{rate:.1f}% rate")
 
-    def start_inspection(self):
-        if self.proc is not None: return
-        expected=int(self.combo_expected.currentData()); self.update_expected_stat()
-        cmd=["python3","/home/pi/battery_batch/auto_capture.py","--expected",str(expected),"--buzzer_pin","21","--keep_raw","200","--keep_out","500"]
-        try:
-            self.proc=subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, text=True, bufsize=1)
-        except FileNotFoundError:
-            QtWidgets.QMessageBox.critical(self,"Error","auto_capture.py not found at /home/pi/battery_batch/"); self.proc=None; return
-        self.log_thread=LogReaderThread(self.proc, expected); self.log_thread.newResult.connect(self.on_new_result); self.log_thread.processExited.connect(self.on_process_exited); self.log_thread.start()
-        self.btn_start.setEnabled(False); self.combo_expected.setEnabled(False); self.btn_stop.setEnabled(True); self.warning_frame.setVisible(False)
-        # 确保开始时不在报警状态
-        self.alarm_active = False
-        self.btn_stop_alarm.setEnabled(False)
-
     def _failsafe_gpio_off(self):
-        # 只在 Stop/关闭窗口调用；Stop Alarm 不触GPIO，避免与子进程竞态
+        # 只在“Start 前预清 / Stop / 关闭窗口”调用；Stop Alarm 不触 GPIO，避免与子进程竞态
         try:
             if SafeBuzzer is not None:
                 b=SafeBuzzer(pin=21, active_high=True)
@@ -173,12 +160,35 @@ class MainWindow(QtWidgets.QMainWindow):
         except Exception:
             pass
 
+    def start_inspection(self):
+        if self.proc is not None: return
+        # 启动前先“预清一次”—处理上一次 Stop/异常导致的 GPIO 残留
+        self._failsafe_gpio_off()
+
+        expected=int(self.combo_expected.currentData()); self.update_expected_stat()
+        cmd=["python3","/home/pi/battery_batch/auto_capture.py","--expected",str(expected),"--buzzer_pin","21","--keep_raw","200","--keep_out","500"]
+        try:
+            self.proc=subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, text=True, bufsize=1)
+        except FileNotFoundError:
+            QtWidgets.QMessageBox.critical(self,"Error","auto_capture.py not found at /home/pi/battery_batch/"); self.proc=None; return
+
+        self.log_thread=LogReaderThread(self.proc, expected)
+        self.log_thread.newResult.connect(self.on_new_result)
+        self.log_thread.processExited.connect(self.on_process_exited)
+        self.log_thread.start()
+
+        self.btn_start.setEnabled(False)
+        self.combo_expected.setEnabled(False)
+        self.btn_stop.setEnabled(True)
+        self.btn_stop_alarm.setEnabled(False)
+        self.warning_frame.setVisible(False)
+        self.alarm_active = False
+
     def stop_inspection(self):
-        # 禁止在报警期间按 Stop
+        # 报警中禁止停止流程（只能先 Stop Alarm）
         if self.alarm_active:
             QtWidgets.QMessageBox.warning(self, "Alarm active", "请先点击『Stop Alarm』静音报警，再停止流程。")
             return
-
         if self.proc is None: return
         try:
             try:
@@ -194,6 +204,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 except subprocess.TimeoutExpired:
                     try: self.proc.kill()
                     except Exception: pass
+            # 停止后再做一次保险清 GPIO
             self._failsafe_gpio_off()
         finally:
             try:
@@ -205,13 +216,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self.alarm_active = False
 
     def stop_alarm(self):
-        # 仅通知子进程停报警（stdin 回车），不触GPIO；恢复 Stop 的可用性
         if self.proc is None: return
+        # 仅通知子进程停报警（stdin 回车），不触 GPIO；随后恢复 Stop 可用
         try:
             self.proc.stdin.write("\n"); self.proc.stdin.flush()
         except Exception:
             pass
-        # UI 状态复位
         self.alarm_active = False
         self.btn_stop_alarm.setEnabled(False)
         self.warning_frame.setVisible(False)
@@ -231,23 +241,26 @@ class MainWindow(QtWidgets.QMainWindow):
         self.total_inspected += 1
         if info.get("ng_count",0)==0: self.total_pass += 1
         else: self.total_fail += 1
-        self.stat_total_val.setText(str(self.total_inspected)); self.stat_passed_val.setText(str(self.total_pass)); self.stat_failed_val.setText(str(self.total_fail)); self._update_pass_rate_label()
+        self.stat_total_val.setText(str(self.total_inspected))
+        self.stat_passed_val.setText(str(self.total_pass))
+        self.stat_failed_val.setText(str(self.total_fail))
+        self._update_pass_rate_label()
 
         if info.get("ng_count",0)>0:
-            # 报警状态：只允许 Stop Alarm
             self.warning_frame.setVisible(True)
             self.alarm_active = True
             self.btn_stop_alarm.setEnabled(True)
-            self.btn_stop.setEnabled(False)
+            self.btn_stop.setEnabled(False)  # 报警时禁用 Stop
         else:
-            # 没有 NG：清警示，恢复按钮
             self.warning_frame.setVisible(False)
             self.alarm_active = False
             self.btn_stop_alarm.setEnabled(False)
-            self.btn_stop.setEnabled(True if self.proc is not None else False)
+            self.btn_stop.setEnabled(self.proc is not None)
 
+        # 卡片
         row=(self.total_inspected-1)//3; col=(self.total_inspected-1)%3
-        card=ResultCard(info); card.clicked.connect(self.show_detail_dialog); self.cards_layout.addWidget(card,row,col); self.empty_label.setVisible(False)
+        card=ResultCard(info); card.clicked.connect(self.show_detail_dialog)
+        self.cards_layout.addWidget(card,row,col); self.empty_label.setVisible(False)
 
     @QtCore.pyqtSlot(int)
     def on_process_exited(self, code):
@@ -255,12 +268,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_start.setEnabled(True); self.combo_expected.setEnabled(True)
         self.btn_stop.setEnabled(False); self.btn_stop_alarm.setEnabled(False); self.warning_frame.setVisible(False)
         self.alarm_active = False
+        # 进程退出后再做一次保险清 GPIO（极端情况下有用）
+        self._failsafe_gpio_off()
 
     def show_detail_dialog(self, info):
         DetailDialog(info, self).exec_()
 
     def closeEvent(self, e):
-        # 若还在报警，先提示关报警
         if self.alarm_active:
             self.stop_alarm()
         try: self.stop_inspection()
