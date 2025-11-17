@@ -1,3 +1,10 @@
+# ================================
+# factory_gui.py  (drop-in)
+# 关键点：
+# 1) NG 报警时禁用 Stop，只允许 Stop Alarm。
+# 2) Stop 时做一次 failsafe 拉低并关闭 GPIO。
+# 3) Start 前清理 UI 状态，确保下一次 NG 能再次触发报警。
+# ================================
 import os, sys, json, signal, subprocess
 from datetime import datetime
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
@@ -130,7 +137,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.total_inspected=self.total_pass=self.total_fail=0
         self.cards_layout=self.findChild(QtWidgets.QGridLayout,"cardsLayout")
 
-        # 新增：报警状态锁
+        # 报警状态锁
         self.alarm_active = False
 
         self.btn_start.clicked.connect(self.start_inspection)
