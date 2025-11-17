@@ -325,7 +325,8 @@ class MainWindow(QtWidgets.QMainWindow):
             "--expected", str(expected),
             "--buzzer_pin", "21",
             "--keep_raw", "200",
-            "--keep_out", "500"
+            "--keep_out", "500",
+            "--led_pin", "20",
         ]
         
         try:
@@ -580,3 +581,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
