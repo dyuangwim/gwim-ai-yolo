@@ -1,11 +1,17 @@
 import os
 import sys
 import json
+import signal
 import subprocess
 from datetime import datetime
 
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
 
+# 为了“最后一击”关蜂鸣器
+try:
+    from utils_hw import Buzzer as SafeBuzzer
+except Exception:
+    SafeBuzzer = None
 
 BATTERY_OPTIONS = [1, 2, 4, 6, 8, 10, 12, 16, 20, 24]
 
@@ -447,24 +453,78 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_stop.setEnabled(True)
         self.warning_frame.setVisible(False)
 
+    def _failsafe_gpio_off(self):
+        """GUI 侧的最后保险：拉低蜂鸣器 GPIO。"""
+        try:
+            if SafeBuzzer is not None:
+                b = SafeBuzzer(pin=21, active_high=True)
+                b.close()  # close() 内部会 off
+        except Exception:
+            pass
+
     def stop_inspection(self):
+        """更温柔且可靠的停止：先停警报，再优雅退出子进程。"""
         if self.proc is None:
             return
         try:
-            self.proc.terminate()
-            self.proc.stdin.close()
-        except Exception:
-            pass
-        self.proc = None
+            # 1) 如果此时正在报警，先像“Stop Alarm”那样喂一个回车
+            try:
+                if self.proc.stdin:
+                    self.proc.stdin.write("\n")
+                    self.proc.stdin.flush()
+            except Exception:
+                pass
+
+            # 2) 优雅退出：先 SIGINT（让 auto_capture 走 finally/atexit）
+            try:
+                self.proc.send_signal(signal.SIGINT)
+            except Exception:
+                pass
+            # 等 1s 看看是否退出
+            try:
+                self.proc.wait(timeout=1.0)
+            except subprocess.TimeoutExpired:
+                # 3) 再发 terminate
+                try:
+                    self.proc.terminate()
+                except Exception:
+                    pass
+                try:
+                    self.proc.wait(timeout=1.0)
+                except subprocess.TimeoutExpired:
+                    # 4) 还不退出就 kill
+                    try:
+                        self.proc.kill()
+                    except Exception:
+                        pass
+
+            # 5) 最后保险：确保 GPIO 低电平
+            self._failsafe_gpio_off()
+
+        finally:
+            try:
+                if self.proc and self.proc.stdin:
+                    self.proc.stdin.close()
+            except Exception:
+                pass
+            self.proc = None
+            self.btn_start.setEnabled(True)
+            self.combo_expected.setEnabled(True)
+            self.btn_stop.setEnabled(False)
+            self.btn_stop_alarm.setEnabled(False)
+            self.warning_frame.setVisible(False)
 
     def stop_alarm(self):
         if self.proc is None:
             return
+        # 给子进程喂一个换行，解除 input() 等待并停止报警线程
         try:
             self.proc.stdin.write("\n")
             self.proc.stdin.flush()
         except Exception:
             pass
+        # 再保险一下 GPIO
+        self._failsafe_gpio_off()
         self.btn_stop_alarm.setEnabled(False)
         self.warning_frame.setVisible(False)
 
@@ -519,18 +579,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self.combo_expected.setEnabled(True)
         self.btn_stop.setEnabled(False)
         self.btn_stop_alarm.setEnabled(False)
+        self.warning_frame.setVisible(False)
 
     def show_detail_dialog(self, info):
         dlg = DetailDialog(info, self)
         dlg.exec_()
 
     def closeEvent(self, event):
-        if self.proc is not None:
-            try:
-                self.proc.terminate()
-                self.proc.stdin.close()
-            except Exception:
-                pass
+        # 关闭窗口时也确保子进程与蜂鸣器被处理干净
+        try:
+            self.stop_inspection()
+        except Exception:
+            pass
         event.accept()
 
 
