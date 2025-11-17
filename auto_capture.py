@@ -28,11 +28,18 @@ def _alarm_quietly():
     global _ALARM_THREAD, _ALARM_STOP_EVT, _BUZZER
     try:
         if _ALARM_STOP_EVT: _ALARM_STOP_EVT.set()
-        if _ALARM_THREAD and _ALARM_THREAD.is_alive(): _ALARM_THREAD.join(timeout=0.6)
-    except Exception: pass
+        if _ALARM_THREAD and _ALARM_THREAD.is_alive(): _ALARM_THREAD.join(timeout=0.8)
+    except Exception: 
+        pass
+    # 确保拉低
     try:
-        if _BUZZER and hasattr(_BUZZER, "off"): _BUZZER.off()
-    except Exception: pass
+        if _BUZZER and hasattr(_BUZZER, "off"):
+            _BUZZER.off()
+    except Exception:
+        pass
+    # 清理句柄
+    _ALARM_THREAD = None
+    _ALARM_STOP_EVT = None
 
 def _buzzer_close_all():
     """真正退出进程时调用：确保停报警并释放 GPIO。"""
@@ -40,7 +47,10 @@ def _buzzer_close_all():
     global _BUZZER
     try:
         if _BUZZER: _BUZZER.close()
-    except Exception: pass
+    except Exception: 
+        pass
+    finally:
+        _BUZZER = None
 
 def _handle_signal(signum, frame):
     _buzzer_close_all()
@@ -96,36 +106,41 @@ def run_detection(img_path, base, expected):
     return ng, json_path
 
 def _ensure_buzzer_ready(pin: int):
-    """确保蜂鸣器可用：如果被释放/异常，重新创建；做一次自检。"""
+    """确保蜂鸣器可用：如已释放/异常，重新创建；做一次非常短的自检。"""
     global _BUZZER
     need_new = (_BUZZER is None)
     if not need_new:
-        # 做一次 50ms 自检；失败则重建
         try:
-            _BUZZER.beep(50); time.sleep(0.06); _BUZZER.off()
+            _BUZZER.off()   # 先确保是静音状态
         except Exception:
             need_new = True
     if need_new:
         try:
             _BUZZER = Buzzer(pin=pin, active_high=True)
-            # 再自检一次（如果此处失败，不抛异常，后面线程里会继续容错）
-            try: _BUZZER.beep(30); time.sleep(0.04); _BUZZER.off()
-            except Exception: pass
+            # 极短自检，避免肉眼可感知的“自检哔一声”
+            try:
+                _BUZZER.on(); time.sleep(0.02); _BUZZER.off()
+            except Exception:
+                pass
         except Exception as e:
             print("⚠️ Recreate buzzer failed:", e)
             _BUZZER = None
 
-def alarm_beep_loop(bz: Buzzer, stop_evt: threading.Event):
-    # 线程内也做容错：如果 beeping 出错，等待一点点再试，直到 stop
+def alarm_continuous_loop(bz: Buzzer, stop_evt: threading.Event):
+    """
+    持续报警：保持 ON，直到 stop_evt 置位；最后确保 OFF。
+    """
     try:
-        if hasattr(bz, "off"): bz.off()
-    except Exception: pass
-    while not stop_evt.is_set():
-        try:    bz.beep(200)
-        except Exception: time.sleep(0.2)
-        time.sleep(0.1)
-    try:
-        if hasattr(bz, "off"): bz.off()
+        bz.on()
+        while not stop_evt.is_set():
+            time.sleep(0.02)
+    except Exception:
+        # 发生错误也确保拉低
+        try: bz.off()
+        except Exception: pass
+        return
+    # 正常结束：拉低
+    try: bz.off()
     except Exception: pass
 
 def _cleanup_dir(path, pattern, keep_last):
@@ -155,7 +170,7 @@ def main():
 
     trig_cm = args.trigger_distance * 100.0; cooldown = args.cooldown
     buzzer_pin = args.buzzer_pin if args.buzzer_pin and args.buzzer_pin > 0 else None
-    if buzzer_pin: print(f"🔔 Buzzer GPIO (BCM): {buzzer_pin} (press Enter to stop when NG)")
+    if buzzer_pin: print(f"🔔 Buzzer GPIO (BCM): {buzzer_pin}（有 NG 时将持续报警，按 Enter 停止）")
     else:         print("🔔 No buzzer GPIO set (no ringing)")
 
     print("🟢 System ready. Waiting for object...")
@@ -170,11 +185,17 @@ def main():
                 _cleanup_outputs(args.keep_raw, args.keep_out)
 
                 if ng > 0 and buzzer_pin:
-                    print(f"❌ {ng} NG packages detected, continuous alerts initiated!")
+                    print(f"❌ {ng} NG packages detected, continuous alert ON!")
                     _ensure_buzzer_ready(buzzer_pin)
                     if _BUZZER is not None:
+                        # 若上一次有残留，先确保停干净
+                        _alarm_quietly()
                         _ALARM_STOP_EVT = threading.Event()
-                        _ALARM_THREAD = threading.Thread(target=alarm_beep_loop, args=(_BUZZER, _ALARM_STOP_EVT), daemon=True)
+                        _ALARM_THREAD = threading.Thread(
+                            target=alarm_continuous_loop,
+                            args=(_BUZZER, _ALARM_STOP_EVT),
+                            daemon=True
+                        )
                         _ALARM_THREAD.start()
                     try:
                         input("🔕 Press Enter to stop the buzzer and continue...\n")
