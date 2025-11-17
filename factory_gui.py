@@ -1,8 +1,8 @@
-import os, sys, json, signal, subprocess
+import os, sys, json, signal, subprocess, time
 from datetime import datetime
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
 
-# 仅用于“Stop/关闭窗口时”的最终保险；Stop Alarm 不触GPIO
+# 仅用于"Stop/关闭窗口时"的最终保险；Stop Alarm 不触GPIO
 try:
     from utils_hw import Buzzer as SafeBuzzer
 except Exception:
@@ -68,34 +68,89 @@ class DetailDialog(QtWidgets.QDialog):
         btn = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Close); btn.rejected.connect(self.reject); lay.addWidget(btn)
 
 class LogReaderThread(QtCore.QThread):
-    newResult = QtCore.pyqtSignal(dict); processExited = QtCore.pyqtSignal(int)
+    newResult = QtCore.pyqtSignal(dict)
+    processExited = QtCore.pyqtSignal(int)
+    
     def __init__(self, process: subprocess.Popen, expected_per_pack: int, parent=None):
-        super().__init__(parent); self._process=process; self._expected=expected_per_pack
+        super().__init__(parent)
+        self._process = process
+        self._expected = expected_per_pack
+        self._stopped = False
+        
+    def stop(self):
+        """停止读取线程"""
+        self._stopped = True
+        
     def run(self):
-        p=self._process; current=None; jpath=None
-        while True:
-            line=p.stdout.readline()
-            if not line:
-                break
-            s=line.strip()
-            if s.startswith("Image: "):
-                current = s.split("Image:",1)[1].strip()
-            elif s.startswith("JSON:"):
-                jpath = s.split("JSON:",1)[1].strip()
-                info=self._build_info(current,jpath)
-                if jpath:
-                    if info: self.newResult.emit(info)
-                    current=None; jpath=None
-        p.wait(); self.processExited.emit(p.returncode)
+        p = self._process
+        current_img = None
+        current_json = None
+        
+        try:
+            while not self._stopped:
+                # 非阻塞读取，带超时
+                line = p.stdout.readline()
+                
+                if not line:  # EOF
+                    break
+                    
+                s = line.strip()
+                
+                # 检测到新图片
+                if s.startswith("Image: "):
+                    current_img = s.split("Image:", 1)[1].strip()
+                    current_json = None  # 重置 JSON 路径
+                    
+                # 检测到 JSON（完整检测周期）
+                elif s.startswith("JSON:"):
+                    current_json = s.split("JSON:", 1)[1].strip()
+                    
+                    # 只有当 Image 和 JSON 都存在时才发射信号
+                    if current_img and current_json:
+                        info = self._build_info(current_img, current_json)
+                        if info:
+                            self.newResult.emit(info)
+                        
+                        # 重置状态，防止重复
+                        current_img = None
+                        current_json = None
+                        
+        except Exception as e:
+            print(f"LogReaderThread error: {e}", file=sys.stderr)
+        finally:
+            # 等待进程结束
+            try:
+                p.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                pass
+            self.processExited.emit(p.returncode if p.returncode is not None else -1)
+    
     def _build_info(self, image_path, json_path):
-        if not image_path: return None
-        info={"image_path":image_path,"expected":self._expected,"ts":datetime.now(),"ng_count":0,"pack_count":0,"packs":[],"json_path":json_path}
+        """构建结果信息字典"""
+        if not image_path:
+            return None
+            
+        info = {
+            "image_path": image_path,
+            "expected": self._expected,
+            "ts": datetime.now(),
+            "ng_count": 0,
+            "pack_count": 0,
+            "packs": [],
+            "json_path": json_path
+        }
+        
         if json_path and os.path.exists(json_path):
             try:
-                with open(json_path,"r") as f: data=json.load(f)
-                packs=data.get("packs",[]); info["packs"]=packs; info["pack_count"]=len(packs); info["ng_count"]=len([p for p in packs if not p.get("ok",True)])
+                with open(json_path, "r") as f:
+                    data = json.load(f)
+                packs = data.get("packs", [])
+                info["packs"] = packs
+                info["pack_count"] = len(packs)
+                info["ng_count"] = len([p for p in packs if not p.get("ok", True)])
             except Exception as e:
-                print("Failed to parse JSON:", e, file=sys.stderr)
+                print(f"Failed to parse JSON: {e}", file=sys.stderr)
+                
         return info
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -127,9 +182,12 @@ class MainWindow(QtWidgets.QMainWindow):
         for n in BATTERY_OPTIONS: self.combo_expected.addItem(f"{n} Battery" if n==1 else f"{n} Batteries", n)
         self.combo_expected.setCurrentIndex(2)
 
-        self.proc=None; self.log_thread=None
-        self.total_inspected=self.total_pass=self.total_fail=0
-        self.cards_layout=self.findChild(QtWidgets.QGridLayout,"cardsLayout")
+        self.proc = None
+        self.log_thread = None
+        self.total_inspected = 0
+        self.total_pass = 0
+        self.total_fail = 0
+        self.cards_layout = self.findChild(QtWidgets.QGridLayout,"cardsLayout")
 
         # 报警状态锁
         self.alarm_active = False
@@ -141,138 +199,260 @@ class MainWindow(QtWidgets.QMainWindow):
         self.combo_expected.currentIndexChanged.connect(self.update_expected_stat)
 
         self.update_expected_stat()
-        self.btn_stop_alarm.setEnabled(False)  # 初始禁用
+        self.btn_stop_alarm.setEnabled(False)
 
-    # --- 控制 ---
     def update_expected_stat(self):
         self.stat_expected_val.setText(str(int(self.combo_expected.currentData())))
 
     def _update_pass_rate_label(self):
-        rate=0.0 if self.total_inspected==0 else self.total_pass*100.0/self.total_inspected
+        rate = 0.0 if self.total_inspected == 0 else self.total_pass * 100.0 / self.total_inspected
         self.label_stat_passed_unit.setText(f"{rate:.1f}% rate")
 
     def start_inspection(self):
-        if self.proc is not None: return
-        expected=int(self.combo_expected.currentData()); self.update_expected_stat()
-        cmd=["python3","/home/pi/battery_batch/auto_capture.py","--expected",str(expected),"--buzzer_pin","21","--keep_raw","200","--keep_out","500"]
+        if self.proc is not None:
+            return
+            
+        expected = int(self.combo_expected.currentData())
+        self.update_expected_stat()
+        
+        cmd = [
+            "python3", "/home/pi/battery_batch/auto_capture.py",
+            "--expected", str(expected),
+            "--buzzer_pin", "21",
+            "--keep_raw", "200",
+            "--keep_out", "500"
+        ]
+        
         try:
-            self.proc=subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.PIPE, text=True, bufsize=1)
+            self.proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.PIPE,
+                text=True,
+                bufsize=1
+            )
         except FileNotFoundError:
-            QtWidgets.QMessageBox.critical(self,"Error","auto_capture.py not found at /home/pi/battery_batch/"); self.proc=None; return
-        self.log_thread=LogReaderThread(self.proc, expected)
+            QtWidgets.QMessageBox.critical(
+                self, "Error",
+                "auto_capture.py not found at /home/pi/battery_batch/"
+            )
+            self.proc = None
+            return
+            
+        # 启动日志读取线程
+        self.log_thread = LogReaderThread(self.proc, expected)
         self.log_thread.newResult.connect(self.on_new_result)
         self.log_thread.processExited.connect(self.on_process_exited)
         self.log_thread.start()
-        self.btn_start.setEnabled(False); self.combo_expected.setEnabled(False); self.btn_stop.setEnabled(True); self.warning_frame.setVisible(False)
+        
+        # 更新 UI 状态
+        self.btn_start.setEnabled(False)
+        self.combo_expected.setEnabled(False)
+        self.btn_stop.setEnabled(True)
+        self.warning_frame.setVisible(False)
+        
         # 确保开始时不在报警状态
         self.alarm_active = False
         self.btn_stop_alarm.setEnabled(False)
 
     def _failsafe_gpio_off(self):
-        # 只在 Stop/关闭窗口调用；Stop Alarm 不触GPIO，避免与子进程竞态
+        """只在 Stop/关闭窗口调用；Stop Alarm 不触GPIO，避免与子进程竞态"""
         try:
             if SafeBuzzer is not None:
-                b=SafeBuzzer(pin=21, active_high=True)
-                b.off(); b.close()
+                b = SafeBuzzer(pin=21, active_high=True)
+                b.off()
+                b.close()
         except Exception:
             pass
 
     def stop_inspection(self):
+        """停止检测流程"""
         # 禁止在报警期间按 Stop
         if self.alarm_active:
-            QtWidgets.QMessageBox.warning(self, "Alarm active", "请先点击『Stop Alarm』静音报警，再停止流程。")
+            QtWidgets.QMessageBox.warning(
+                self, "Alarm active",
+                "请先点击『Stop Alarm』静音报警，再停止流程。"
+            )
             return
 
-        if self.proc is None: return
+        if self.proc is None:
+            return
+            
         try:
-            # 给子进程一个“可能的回车”，如果它正处于等待（不是则忽略）
+            # 停止日志读取线程
+            if self.log_thread:
+                self.log_thread.stop()
+                
+            # 尝试优雅地终止子进程
             try:
-                if self.proc.stdin: self.proc.stdin.write("\n"); self.proc.stdin.flush()
-            except Exception: pass
+                if self.proc.stdin and not self.proc.stdin.closed:
+                    self.proc.stdin.write("\n")
+                    self.proc.stdin.flush()
+            except Exception:
+                pass
+                
+            # 发送 SIGINT
             try:
                 self.proc.send_signal(signal.SIGINT)
-            except Exception: pass
+            except Exception:
+                pass
+                
+            # 等待进程结束
             try:
-                self.proc.wait(timeout=1.2)
+                self.proc.wait(timeout=1.5)
             except subprocess.TimeoutExpired:
-                try: self.proc.terminate()
-                except Exception: pass
-                try: self.proc.wait(timeout=1.2)
+                try:
+                    self.proc.terminate()
+                    self.proc.wait(timeout=1.0)
                 except subprocess.TimeoutExpired:
-                    try: self.proc.kill()
-                    except Exception: pass
+                    try:
+                        self.proc.kill()
+                    except Exception:
+                        pass
+                        
+            # 确保 GPIO 关闭
             self._failsafe_gpio_off()
+            
         finally:
+            # 清理资源
             try:
-                if self.proc and self.proc.stdin: self.proc.stdin.close()
-            except Exception: pass
-            self.proc=None
-            self.btn_start.setEnabled(True); self.combo_expected.setEnabled(True)
-            self.btn_stop.setEnabled(False); self.btn_stop_alarm.setEnabled(False); self.warning_frame.setVisible(False)
+                if self.proc and self.proc.stdin and not self.proc.stdin.closed:
+                    self.proc.stdin.close()
+            except Exception:
+                pass
+                
+            # 等待日志线程结束
+            if self.log_thread:
+                self.log_thread.wait(2000)  # 等待最多 2 秒
+                self.log_thread = None
+                
+            self.proc = None
+            
+            # 更新 UI
+            self.btn_start.setEnabled(True)
+            self.combo_expected.setEnabled(True)
+            self.btn_stop.setEnabled(False)
+            self.btn_stop_alarm.setEnabled(False)
+            self.warning_frame.setVisible(False)
             self.alarm_active = False
 
     def stop_alarm(self):
-        # 仅通知子进程停报警（stdin 回车），不触GPIO；恢复 Stop 的可用性
-        if self.proc is None: return
+        """仅通知子进程停报警（stdin 回车），不触GPIO；恢复 Stop 的可用性"""
+        if self.proc is None:
+            return
+            
         try:
-            self.proc.stdin.write("\n"); self.proc.stdin.flush()
-        except Exception:
-            pass
+            if self.proc.stdin and not self.proc.stdin.closed:
+                self.proc.stdin.write("\n")
+                self.proc.stdin.flush()
+        except Exception as e:
+            print(f"Failed to send stop alarm signal: {e}", file=sys.stderr)
+            
+        # 更新状态
         self.alarm_active = False
         self.btn_stop_alarm.setEnabled(False)
         self.warning_frame.setVisible(False)
         self.btn_stop.setEnabled(True)
 
     def reset_counters(self):
-        self.total_inspected=self.total_pass=self.total_fail=0
-        self.stat_total_val.setText("0"); self.stat_passed_val.setText("0"); self.stat_failed_val.setText("0")
+        """重置计数器和结果卡片"""
+        self.total_inspected = 0
+        self.total_pass = 0
+        self.total_fail = 0
+        
+        self.stat_total_val.setText("0")
+        self.stat_passed_val.setText("0")
+        self.stat_failed_val.setText("0")
         self._update_pass_rate_label()
+        
+        # 清空所有卡片
         while self.cards_layout.count():
-            it=self.cards_layout.takeAt(0); w=it.widget()
-            if w: w.deleteLater()
+            item = self.cards_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+                
         self.empty_label.setVisible(True)
 
     @QtCore.pyqtSlot(dict)
     def on_new_result(self, info):
+        """处理新的检测结果"""
         self.total_inspected += 1
-        if info.get("ng_count",0)==0: self.total_pass += 1
-        else: self.total_fail += 1
-        self.stat_total_val.setText(str(self.total_inspected)); self.stat_passed_val.setText(str(self.total_pass)); self.stat_failed_val.setText(str(self.total_fail)); self._update_pass_rate_label()
+        
+        if info.get("ng_count", 0) == 0:
+            self.total_pass += 1
+        else:
+            self.total_fail += 1
+            
+        # 更新统计数据
+        self.stat_total_val.setText(str(self.total_inspected))
+        self.stat_passed_val.setText(str(self.total_pass))
+        self.stat_failed_val.setText(str(self.total_fail))
+        self._update_pass_rate_label()
 
-        if info.get("ng_count",0)>0:
-            # 报警状态：只允许 Stop Alarm
+        # 处理报警状态
+        if info.get("ng_count", 0) > 0:
+            # NG 检测到：进入报警状态
             self.warning_frame.setVisible(True)
             self.alarm_active = True
             self.btn_stop_alarm.setEnabled(True)
-            self.btn_stop.setEnabled(False)
+            self.btn_stop.setEnabled(False)  # 报警时禁用 Stop
         else:
+            # Pass：确保不在报警状态
             self.warning_frame.setVisible(False)
             self.alarm_active = False
             self.btn_stop_alarm.setEnabled(False)
             self.btn_stop.setEnabled(True if self.proc is not None else False)
 
-        row=(self.total_inspected-1)//3; col=(self.total_inspected-1)%3
-        card=ResultCard(info); card.clicked.connect(self.show_detail_dialog); self.cards_layout.addWidget(card,row,col); self.empty_label.setVisible(False)
+        # 添加结果卡片
+        row = (self.total_inspected - 1) // 3
+        col = (self.total_inspected - 1) % 3
+        card = ResultCard(info)
+        card.clicked.connect(self.show_detail_dialog)
+        self.cards_layout.addWidget(card, row, col)
+        self.empty_label.setVisible(False)
 
     @QtCore.pyqtSlot(int)
     def on_process_exited(self, code):
-        self.proc=None; self.log_thread=None
-        self.btn_start.setEnabled(True); self.combo_expected.setEnabled(True)
-        self.btn_stop.setEnabled(False); self.btn_stop_alarm.setEnabled(False); self.warning_frame.setVisible(False)
+        """子进程退出处理"""
+        print(f"Process exited with code: {code}", file=sys.stderr)
+        
+        self.proc = None
+        self.log_thread = None
+        
+        # 更新 UI
+        self.btn_start.setEnabled(True)
+        self.combo_expected.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+        self.btn_stop_alarm.setEnabled(False)
+        self.warning_frame.setVisible(False)
         self.alarm_active = False
 
     def show_detail_dialog(self, info):
+        """显示详细信息对话框"""
         DetailDialog(info, self).exec_()
 
     def closeEvent(self, e):
+        """窗口关闭事件"""
+        # 如果在报警，先停止
         if self.alarm_active:
             self.stop_alarm()
-        try: self.stop_inspection()
-        except Exception: pass
+            time.sleep(0.2)  # 给子进程一点时间响应
+            
+        # 停止检测
+        try:
+            self.stop_inspection()
+        except Exception:
+            pass
+            
         e.accept()
 
 def main():
-    app=QtWidgets.QApplication(sys.argv); win=MainWindow(); win.show(); sys.exit(app.exec_())
+    app = QtWidgets.QApplication(sys.argv)
+    win = MainWindow()
+    win.show()
+    sys.exit(app.exec_())
 
 if __name__ == "__main__":
     main()
