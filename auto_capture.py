@@ -8,6 +8,8 @@ import subprocess
 import warnings
 import argparse
 import threading
+import signal
+import atexit
 from datetime import datetime
 
 from picamera2 import Picamera2
@@ -41,6 +43,40 @@ sensor = DistanceSensor(
     trigger=TRIG_PIN,
     max_distance=MAX_DISTANCE_M,
 )
+
+# ---------- 全局对象，确保任何退出路径都能 OFF ----------
+_BUZZER = None                # type: Buzzer | None
+_ALARM_THREAD = None          # type: threading.Thread | None
+_ALARM_STOP_EVT = None        # type: threading.Event | None
+
+
+def _buzzer_off_safely():
+    """无论何种退出都将蜂鸣器拉低。"""
+    global _BUZZER, _ALARM_STOP_EVT, _ALARM_THREAD
+    try:
+        if _ALARM_STOP_EVT is not None:
+            _ALARM_STOP_EVT.set()
+        if _ALARM_THREAD is not None and _ALARM_THREAD.is_alive():
+            _ALARM_THREAD.join(timeout=0.3)
+    except Exception:
+        pass
+    try:
+        if _BUZZER is not None:
+            # utils_hw.Buzzer.off() 封装在 close() 里
+            _BUZZER.close()
+    except Exception:
+        pass
+
+def _handle_signal(signum, frame):
+    # 收到 SIGINT / SIGTERM 时，确保蜂鸣器关闭，再优雅退出
+    _buzzer_off_safely()
+    # 直接退出整个进程
+    raise SystemExit(0)
+
+# 注册退出钩子与信号处理
+atexit.register(_buzzer_off_safely)
+signal.signal(signal.SIGINT, _handle_signal)
+signal.signal(signal.SIGTERM, _handle_signal)
 
 
 def parse_args():
@@ -154,9 +190,28 @@ def alarm_beep_loop(bz: Buzzer, stop_event: threading.Event):
     """
     在独立线程里循环 beep，直到 stop_event 被 set。
     """
+    # 额外保护：进入循环前先确保 OFF
+    try:
+        bz.off = getattr(bz, "off", None)
+        if callable(bz.off):
+            bz.off()
+    except Exception:
+        pass
+
     while not stop_event.is_set():
-        bz.beep(200)        # 响 200ms
-        time.sleep(0.1)     # 间隔 100ms
+        try:
+            bz.beep(200)        # 响 200ms
+        except Exception:
+            # 硬件异常也不中断主流程
+            time.sleep(0.2)
+        time.sleep(0.1)         # 间隔 100ms
+
+    # 退出循环再确保一次 OFF
+    try:
+        if callable(getattr(bz, "off", None)):
+            bz.off()
+    except Exception:
+        pass
 
 
 def cleanup_dir(path, pattern, keep_last):
@@ -190,6 +245,8 @@ def cleanup_outputs(keep_raw: int, keep_out: int):
 
 
 def main():
+    global _BUZZER, _ALARM_THREAD, _ALARM_STOP_EVT
+
     args = parse_args()
 
     # 1) 处理 expected：<=0 时，让用户在启动时输入
@@ -209,9 +266,8 @@ def main():
     cooldown_s = float(args.cooldown)
 
     # 2) 初始化蜂鸣器（统一在这里管理报警）
-    buz = None
     if args.buzzer_pin is not None and args.buzzer_pin > 0:
-        buz = Buzzer(pin=args.buzzer_pin, active_high=True)
+        _BUZZER = Buzzer(pin=args.buzzer_pin, active_high=True)
         print(
             f"🔔 Buzzer GPIO (BCM): {args.buzzer_pin} "
             f"(An alarm will continuously sound if there is an NG (Not Okay) error; press Enter to stop.)"
@@ -235,17 +291,26 @@ def main():
                 cleanup_outputs(args.keep_raw, args.keep_out)
 
                 # 如果有 NG → 启动持续报警，直到用户按 Enter
-                if ng_count > 0 and buz is not None:
+                if ng_count > 0 and _BUZZER is not None:
                     print(f"❌ {ng_count} NG packages detected, continuous alerts initiated!")
-                    stop_evt = threading.Event()
-                    th = threading.Thread(
-                        target=alarm_beep_loop, args=(buz, stop_evt), daemon=True
+                    _ALARM_STOP_EVT = threading.Event()
+                    _ALARM_THREAD = threading.Thread(
+                        target=alarm_beep_loop, args=(_BUZZER, _ALARM_STOP_EVT), daemon=True
                     )
-                    th.start()
-                    input("🔕 Press Enter to stop the buzzer and continue...\n")
-                    stop_evt.set()
-                    th.join()
-                    print("🔕 The alarm has been stopped.")
+                    _ALARM_THREAD.start()
+                    try:
+                        input("🔕 Press Enter to stop the buzzer and continue...\n")
+                    except EOFError:
+                        # 如果上游（GUI）关闭了 stdin，也立刻停警报并优雅退出
+                        pass
+                    finally:
+                        if _ALARM_STOP_EVT is not None:
+                            _ALARM_STOP_EVT.set()
+                        if _ALARM_THREAD is not None:
+                            _ALARM_THREAD.join(timeout=0.5)
+                        # 再确保一次 OFF
+                        _buzzer_off_safely()
+                        print("🔕 The alarm has been stopped.")
 
                 print(f"⏸ Cooling {cooldown_s:.1f} s before next trigger...\n")
                 time.sleep(cooldown_s)
@@ -254,8 +319,14 @@ def main():
 
     except KeyboardInterrupt:
         print("\n🛑 Exited by user.")
+    except SystemExit:
+        # 来自信号处理的退出
+        print("\n🛑 Terminated.")
     except Exception as e:
         print("\n❌ Error:", e)
+    finally:
+        # 任何退出路径都确保拉低蜂鸣器
+        _buzzer_off_safely()
 
 
 if __name__ == "__main__":
