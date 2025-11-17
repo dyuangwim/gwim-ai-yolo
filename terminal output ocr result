@@ -1,15 +1,15 @@
 (ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/factory_gui.py 
 [GUI] Starting inspection with expected=4
-[GUI] Process started with PID: 9408
+[GUI] Process started with PID: 9617
 [GUI] Inspection started successfully
 [LogReader] 🔔 Buzzer GPIO (BCM): 21（有 NG 时将持续报警，GUI 点『Stop Alarm』静音）
-[LogReader] Done. Cards: 2 | NG: 2 | Time: 669.8 ms
+[LogReader] Done. Cards: 2 | NG: 2 | Time: 661.9 ms
 [LogReader] Emitting result: NG=2
 [GUI] New result received: NG=2
 [GUI] NG detected, activating alarm UI
 [LogReader] [Main] Detection complete: NG count = 2
-[LogReader] [Main] NG detected, starting alarm...
-[LogReader] [Alarm] Buzzer ON - continuous alarm started
+[LogReader] [Main] ⚠️⚠️⚠️ NG detected, starting alarm... ⚠️⚠️⚠️
+[LogReader] [Alarm] 🔊🔊🔊 Buzzer ON - continuous alarm started 🔊🔊🔊
 [LogReader] [WaitAlarm] Waiting for stop signal from GUI...
 [GUI] Stop alarm requested
 [GUI] Sending newline to stop alarm
@@ -17,9 +17,9 @@
 [LogReader] [WaitAlarm] Received data from stdin: '\n'
 [LogReader] [WaitAlarm] Stop signal received (newline)
 [LogReader] [WaitAlarm] Wait finished
-[LogReader] [Alarm] Buzzer OFF - alarm stopped
+[LogReader] [Alarm] 🔇 Buzzer OFF - alarm stopped 🔇
 [GUI] Stop inspection requested
-[GUI] Stopping process PID: 9408
+[GUI] Stopping process PID: 9617
 [GUI] Sending newline to stdin
 [GUI] SIGINT sent
 [GUI] Process ended gracefully
@@ -27,21 +27,16 @@
 [GUI] Stop inspection complete
 [GUI] Process exited with code: 0
 [GUI] Starting inspection with expected=4
-[GUI] Process started with PID: 9455
+[GUI] Process started with PID: 9682
 [GUI] Inspection started successfully
 [LogReader] 🔔 Buzzer GPIO (BCM): 21（有 NG 时将持续报警，GUI 点『Stop Alarm』静音）
-[LogReader] Done. Cards: 0 | NG: 0 | Time: 669.2 ms
-[LogReader] Emitting result: NG=0
-[GUI] New result received: NG=0
-[GUI] Pass detected, no alarm
-[LogReader] [Main] Detection complete: NG count = 0
-[LogReader] Done. Cards: 2 | NG: 2 | Time: 662.9 ms
+[LogReader] Done. Cards: 2 | NG: 2 | Time: 725.2 ms
 [LogReader] Emitting result: NG=2
 [GUI] New result received: NG=2
 [GUI] NG detected, activating alarm UI
 [LogReader] [Main] Detection complete: NG count = 2
-[LogReader] [Main] NG detected, starting alarm...
-[LogReader] [Alarm] Buzzer ON - continuous alarm started
+[LogReader] [Main] ⚠️⚠️⚠️ NG detected, starting alarm... ⚠️⚠️⚠️
+[LogReader] [Alarm] 🔊🔊🔊 Buzzer ON - continuous alarm started 🔊🔊🔊
 [LogReader] [WaitAlarm] Waiting for stop signal from GUI...
 [GUI] Stop alarm requested
 [GUI] Sending newline to stop alarm
@@ -49,9 +44,9 @@
 [LogReader] [WaitAlarm] Received data from stdin: '\n'
 [LogReader] [WaitAlarm] Stop signal received (newline)
 [LogReader] [WaitAlarm] Wait finished
-[LogReader] [Alarm] Buzzer OFF - alarm stopped
+[LogReader] [Alarm] 🔇 Buzzer OFF - alarm stopped 🔇
 [GUI] Stop inspection requested
-[GUI] Stopping process PID: 9455
+[GUI] Stopping process PID: 9682
 [GUI] Sending newline to stdin
 [GUI] SIGINT sent
 [GUI] Process ended gracefully
@@ -59,16 +54,16 @@
 [GUI] Stop inspection complete
 [GUI] Process exited with code: 0
 [GUI] Starting inspection with expected=4
-[GUI] Process started with PID: 9518
+[GUI] Process started with PID: 9729
 [GUI] Inspection started successfully
 [LogReader] 🔔 Buzzer GPIO (BCM): 21（有 NG 时将持续报警，GUI 点『Stop Alarm』静音）
-[LogReader] Done. Cards: 2 | NG: 2 | Time: 669.1 ms
+[LogReader] Done. Cards: 2 | NG: 2 | Time: 663.6 ms
 [LogReader] Emitting result: NG=2
 [GUI] New result received: NG=2
 [GUI] NG detected, activating alarm UI
 [LogReader] [Main] Detection complete: NG count = 2
-[LogReader] [Main] NG detected, starting alarm...
-[LogReader] [Alarm] Buzzer ON - continuous alarm started
+[LogReader] [Main] ⚠️⚠️⚠️ NG detected, starting alarm... ⚠️⚠️⚠️
+[LogReader] [Alarm] 🔊🔊🔊 Buzzer ON - continuous alarm started 🔊🔊🔊
 [LogReader] [WaitAlarm] Waiting for stop signal from GUI...
 [GUI] Stop alarm requested
 [GUI] Sending newline to stop alarm
@@ -76,4 +71,39 @@
 [LogReader] [WaitAlarm] Received data from stdin: '\n'
 [LogReader] [WaitAlarm] Stop signal received (newline)
 [LogReader] [WaitAlarm] Wait finished
-[LogReader] [Alarm] Buzzer OFF - alarm stopped
+[LogReader] [Alarm] 🔇 Buzzer OFF - alarm stopped 🔇
+[GUI] Stop inspection requested
+[GUI] Stopping process PID: 9729
+[GUI] Sending newline to stdin
+[GUI] SIGINT sent
+[GUI] Process ended gracefully
+[GUI] Failsafe GPIO off executed
+[GUI] Stop inspection complete
+[GUI] Process exited with code: 0
+[GUI] Starting inspection with expected=4
+[GUI] Process started with PID: 9773
+[GUI] Inspection started successfully
+[LogReader] 🔔 Buzzer GPIO (BCM): 21（有 NG 时将持续报警，GUI 点『Stop Alarm』静音）
+[LogReader] Done. Cards: 2 | NG: 2 | Time: 663.3 ms
+[LogReader] Emitting result: NG=2
+[GUI] New result received: NG=2
+[GUI] NG detected, activating alarm UI
+[LogReader] [Main] Detection complete: NG count = 2
+[LogReader] [Main] ⚠️⚠️⚠️ NG detected, starting alarm... ⚠️⚠️⚠️
+[LogReader] [Alarm] 🔊🔊🔊 Buzzer ON - continuous alarm started 🔊🔊🔊
+[LogReader] [WaitAlarm] Waiting for stop signal from GUI...
+[GUI] Stop alarm requested
+[GUI] Sending newline to stop alarm
+[GUI] Stop alarm signal sent
+[LogReader] [WaitAlarm] Received data from stdin: '\n'
+[LogReader] [WaitAlarm] Stop signal received (newline)
+[LogReader] [WaitAlarm] Wait finished
+[LogReader] [Alarm] 🔇 Buzzer OFF - alarm stopped 🔇
+[GUI] Stop inspection requested
+[GUI] Stopping process PID: 9773
+[GUI] Sending newline to stdin
+[GUI] SIGINT sent
+[GUI] Process ended gracefully
+[GUI] Failsafe GPIO off executed
+[GUI] Stop inspection complete
+[GUI] Process exited with code: 0
