@@ -22,14 +22,16 @@ sensor = DistanceSensor(echo=ECHO_PIN, trigger=TRIG_PIN, max_distance=MAX_DISTAN
 _BUZZER = None
 _ALARM_THREAD = None
 _ALARM_STOP_EVT = None
-_SHUTDOWN_FLAG = False  # 新增：全局退出标志
+_SHUTDOWN_FLAG = False
 
 def _alarm_quietly():
     """仅停止报警：停线程 + 拉低；不释放GPIO。"""
     global _ALARM_THREAD, _ALARM_STOP_EVT, _BUZZER
     try:
-        if _ALARM_STOP_EVT: _ALARM_STOP_EVT.set()
-        if _ALARM_THREAD and _ALARM_THREAD.is_alive(): _ALARM_THREAD.join(timeout=0.8)
+        if _ALARM_STOP_EVT: 
+            _ALARM_STOP_EVT.set()
+        if _ALARM_THREAD and _ALARM_THREAD.is_alive(): 
+            _ALARM_THREAD.join(timeout=1.0)
     except Exception:
         pass
     try:
@@ -42,20 +44,21 @@ def _alarm_quietly():
 
 def _buzzer_close_all():
     """真正退出进程时调用：确保停报警并释放 GPIO。"""
-    global _SHUTDOWN_FLAG
+    global _SHUTDOWN_FLAG, _BUZZER
     _SHUTDOWN_FLAG = True
     _alarm_quietly()
-    global _BUZZER
     try:
-        if _BUZZER: _BUZZER.close()
+        if _BUZZER: 
+            _BUZZER.close()
     except Exception:
         pass
     finally:
         _BUZZER = None
 
 def _handle_signal(signum, frame):
+    print(f"\n[Signal {signum}] Shutting down...", flush=True)
     _buzzer_close_all()
-    raise SystemExit(0)
+    sys.exit(0)
 
 atexit.register(_buzzer_close_all)
 signal.signal(signal.SIGINT, _handle_signal)
@@ -76,31 +79,44 @@ def get_distance_cm():
 
 def capture_image():
     picam2 = Picamera2()
-    cfg = picam2.create_preview_configuration(main={"size": (CAM_W, CAM_H), "format": "YUV420"}, controls={"FrameRate": 30})
-    picam2.configure(cfg); picam2.start(); time.sleep(0.5)
+    cfg = picam2.create_preview_configuration(
+        main={"size": (CAM_W, CAM_H), "format": "YUV420"}, 
+        controls={"FrameRate": 30}
+    )
+    picam2.configure(cfg)
+    picam2.start()
+    time.sleep(0.5)
     yuv = picam2.capture_array("main")
     try:
         bgr = cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_I420)
     except:
         bgr = cv2.cvtColor(yuv, cv2.COLOR_YUV2BGR_NV12)
-    picam2.stop(); picam2.close()
+    picam2.stop()
+    picam2.close()
+    
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    base = f"auto_{ts}"; path = os.path.join(SAVE_DIR, f"{base}.jpg")
+    base = f"auto_{ts}"
+    path = os.path.join(SAVE_DIR, f"{base}.jpg")
     cv2.imwrite(path, bgr)
-    print(f"Image: {path}", flush=True)  # 添加 flush
+    print(f"Image: {path}", flush=True)
     return path, base
 
 def run_detection(img_path, base, expected):
     json_path = os.path.join(OUT_DIR, f"{base}.json")
     cmd = [
         "python3", "/home/pi/battery_batch/detect_batch.py",
-        "--card_weights", CARD_MODEL, "--bat_weights", BAT_MODEL,
-        "--img", img_path, "--expected", str(expected),
-        "--rotate", "0", "--out_dir", OUT_DIR, "--card_conf", "0.50",
+        "--card_weights", CARD_MODEL, 
+        "--bat_weights", BAT_MODEL,
+        "--img", img_path, 
+        "--expected", str(expected),
+        "--rotate", "0", 
+        "--out_dir", OUT_DIR, 
+        "--card_conf", "0.50",
         "--save_name", base,
     ]
     subprocess.run(cmd)
-    print(f"JSON: {json_path}", flush=True)  # 添加 flush
+    print(f"JSON: {json_path}", flush=True)
+    
     ng = 0
     try:
         with open(json_path, "r") as f:
@@ -108,27 +124,32 @@ def run_detection(img_path, base, expected):
         packs = data.get("packs", [])
         ng = len([p for p in packs if not p.get("ok", True)])
     except Exception as e:
-        print("⚠️ Failed to read JSON:", e, flush=True)
+        print(f"⚠️ Failed to read JSON: {e}", flush=True)
     return ng, json_path
 
 def _ensure_buzzer_ready(pin: int):
     """确保蜂鸣器可用：如已释放/异常，重新创建；做一次非常短的自检。"""
     global _BUZZER
     need_new = (_BUZZER is None)
+    
     if not need_new:
         try:
             _BUZZER.off()
         except Exception:
             need_new = True
+            
     if need_new:
         try:
             _BUZZER = Buzzer(pin=pin, active_high=True)
+            # 快速自检
             try:
-                _BUZZER.on(); time.sleep(0.02); _BUZZER.off()
+                _BUZZER.on()
+                time.sleep(0.02)
+                _BUZZER.off()
             except Exception:
                 pass
         except Exception as e:
-            print("⚠️ Recreate buzzer failed:", e, flush=True)
+            print(f"⚠️ Recreate buzzer failed: {e}", flush=True)
             _BUZZER = None
 
 def alarm_continuous_loop(bz: Buzzer, stop_evt: threading.Event):
@@ -137,52 +158,90 @@ def alarm_continuous_loop(bz: Buzzer, stop_evt: threading.Event):
     """
     try:
         bz.on()
+        print("[Alarm] Buzzer ON - continuous alarm started", flush=True)
         while not stop_evt.is_set():
-            time.sleep(0.02)
-    except Exception:
-        try: bz.off()
-        except Exception: pass
-        return
-    try: bz.off()
-    except Exception: pass
+            time.sleep(0.05)
+    except Exception as e:
+        print(f"[Alarm] Error in alarm loop: {e}", flush=True)
+    finally:
+        try:
+            bz.off()
+            print("[Alarm] Buzzer OFF - alarm stopped", flush=True)
+        except Exception:
+            pass
 
-def wait_enter_from_gui(stop_evt: threading.Event):
+def wait_enter_from_gui(stop_evt: threading.Event, timeout_sec: float = 300.0):
     """
-    改进版：通过持续读取 stdin 来等待 GUI 的停止信号
-    - 读到 '\n' 则停止报警
-    - 读到 EOF 或异常则继续等待（防止误触发）
-    - 检查全局退出标志
+    改进版：通过持续检查 stdin 来等待 GUI 的停止信号
+    
+    关键改进：
+    1. 使用非阻塞模式读取 stdin
+    2. 添加超时保护（默认 5 分钟）
+    3. 更好的错误处理
+    4. 定期检查 stop_evt 和 shutdown flag
     """
     global _SHUTDOWN_FLAG
     
-    while not stop_evt.is_set() and not _SHUTDOWN_FLAG:
-        try:
-            # 非阻塞读取，超时 0.1 秒
-            line = sys.stdin.readline()
-            
-            if not line:  # EOF
-                # stdin 被关闭，继续等待 stop_evt（可能是 GUI Stop 触发）
-                time.sleep(0.1)
-                continue
-                
-            # 收到有效输入（通常是 '\n'）
-            if '\n' in line:
+    print("[WaitAlarm] Waiting for stop signal from GUI...", flush=True)
+    start_time = time.time()
+    
+    # 设置 stdin 为非阻塞模式
+    import fcntl
+    stdin_fd = sys.stdin.fileno()
+    old_flags = fcntl.fcntl(stdin_fd, fcntl.F_GETFL)
+    fcntl.fcntl(stdin_fd, fcntl.F_SETFL, old_flags | os.O_NONBLOCK)
+    
+    try:
+        while not stop_evt.is_set() and not _SHUTDOWN_FLAG:
+            # 检查超时
+            if time.time() - start_time > timeout_sec:
+                print("[WaitAlarm] Timeout reached, stopping alarm", flush=True)
                 break
+            
+            try:
+                # 尝试非阻塞读取
+                data = sys.stdin.read(1024)
+                if data:
+                    print(f"[WaitAlarm] Received data from stdin: {repr(data)}", flush=True)
+                    if '\n' in data:
+                        print("[WaitAlarm] Stop signal received (newline)", flush=True)
+                        break
+                else:
+                    # 空数据，继续等待
+                    time.sleep(0.1)
+            except BlockingIOError:
+                # 没有数据可读，继续等待
+                time.sleep(0.1)
+            except (IOError, OSError) as e:
+                # stdin 可能被关闭或其他错误
+                print(f"[WaitAlarm] stdin read error: {e}, continuing...", flush=True)
+                time.sleep(0.2)
+            except Exception as e:
+                print(f"[WaitAlarm] Unexpected error: {e}", flush=True)
+                time.sleep(0.2)
                 
-        except (IOError, OSError):
-            # stdin 读取错误，继续等待
-            time.sleep(0.1)
-            continue
-        except KeyboardInterrupt:
-            # Ctrl+C，退出
-            break
+    finally:
+        # 恢复 stdin 的阻塞模式
+        try:
+            fcntl.fcntl(stdin_fd, fcntl.F_SETFL, old_flags)
+        except Exception:
+            pass
+    
+    print("[WaitAlarm] Wait finished", flush=True)
 
 def _cleanup_dir(path, pattern, keep_last):
-    if keep_last <= 0: return
-    files = sorted(glob.glob(os.path.join(path, pattern)), key=os.path.getmtime, reverse=True)
+    if keep_last <= 0: 
+        return
+    files = sorted(
+        glob.glob(os.path.join(path, pattern)), 
+        key=os.path.getmtime, 
+        reverse=True
+    )
     for f in files[keep_last:]:
-        try: os.remove(f)
-        except Exception: pass
+        try: 
+            os.remove(f)
+        except Exception: 
+            pass
 
 def _cleanup_outputs(keep_raw, keep_out):
     _cleanup_dir(SAVE_DIR, "auto_*.jpg", keep_raw)
@@ -198,14 +257,20 @@ def main():
         while True:
             s = input("Please enter expected batteries per pack (1/2/4/...): ").strip()
             if s.isdigit() and int(s) > 0:
-                expected = int(s); break
+                expected = int(s)
+                break
             print("● Invalid input, try again.")
+    
     print(f"📢 Current packaging settings: {expected} batteries per pack", flush=True)
 
-    trig_cm = args.trigger_distance * 100.0; cooldown = args.cooldown
+    trig_cm = args.trigger_distance * 100.0
+    cooldown = args.cooldown
     buzzer_pin = args.buzzer_pin if args.buzzer_pin and args.buzzer_pin > 0 else None
-    if buzzer_pin: 
+    
+    if buzzer_pin:
         print(f"🔔 Buzzer GPIO (BCM): {buzzer_pin}（有 NG 时将持续报警，GUI 点『Stop Alarm』静音）", flush=True)
+        # 预先初始化蜂鸣器
+        _ensure_buzzer_ready(buzzer_pin)
     else:
         print("🔔 No buzzer GPIO set (no ringing)", flush=True)
 
@@ -217,12 +282,20 @@ def main():
             time.sleep(0.15)
             
             if d < trig_cm:
+                print(f"[Main] Object detected at {d:.2f}cm, capturing...", flush=True)
+                
                 img, base = capture_image()
                 ng, _ = run_detection(img, base, expected)
                 _cleanup_outputs(args.keep_raw, args.keep_out)
 
+                print(f"[Main] Detection complete: NG count = {ng}", flush=True)
+
                 if ng > 0 and buzzer_pin:
+                    print("[Main] NG detected, starting alarm...", flush=True)
+                    
+                    # 确保蜂鸣器就绪
                     _ensure_buzzer_ready(buzzer_pin)
+                    
                     if _BUZZER is not None:
                         # 停止旧报警（如果有）
                         _alarm_quietly()
@@ -235,28 +308,36 @@ def main():
                             daemon=True
                         )
                         _ALARM_THREAD.start()
-                        print("🔴 NG detected! Alarm started. Waiting for GUI stop signal...", flush=True)
+                        print("🔴 Alarm started! Waiting for GUI stop signal...", flush=True)
 
                         # 等待 GUI 发送停止信号
                         wait_enter_from_gui(_ALARM_STOP_EVT)
 
                         # 收到信号 → 停报警
                         _alarm_quietly()
-                        print("🔕 The alarm has been stopped.", flush=True)
+                        print("🔕 Alarm stopped by GUI", flush=True)
+                    else:
+                        print("⚠️ Buzzer not available, skipping alarm", flush=True)
                 else:
                     # 无 NG：确保没有残留报警线程
                     _alarm_quietly()
+                    if ng == 0:
+                        print("✅ All packs passed inspection", flush=True)
 
                 time.sleep(cooldown)
                 
     except KeyboardInterrupt:
-        print("\n🛑 Exited by user.", flush=True)
+        print("\n🛑 Exited by user (Ctrl+C)", flush=True)
     except SystemExit:
-        print("\n🛑 Terminated.", flush=True)
+        print("\n🛑 System exit", flush=True)
     except Exception as e:
-        print(f"\n❌ Error: {e}", flush=True)
+        print(f"\n❌ Unexpected error: {e}", flush=True)
+        import traceback
+        traceback.print_exc()
     finally:
+        print("[Main] Cleanup...", flush=True)
         _buzzer_close_all()
+        print("[Main] Exit complete", flush=True)
 
 if __name__ == "__main__":
     main()
