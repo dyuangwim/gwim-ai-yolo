@@ -1,30 +1,80 @@
-#!/usr/bin/env python3
+"""
+This Raspberry Pi code was developed by newbiely.com
+This Raspberry Pi code is made available for public use without any restriction
+For comprehensive instructions and wiring diagrams, please visit:
+https://newbiely.com/tutorials/raspberry-pi/raspberry-pi-stepper-motor
+"""
+
+
+import RPi.GPIO as GPIO
 import time
-from gpiozero import DigitalOutputDevice
 
-# 把这里改成你实际接到 L298N IN1~IN4 的 BCM 脚位
-PINS = [5, 6, 13, 19]
+# Define GPIO pins for L298N driver
+IN1 = 12
+IN2 = 16
+IN3 = 20
+IN4 = 21
 
-devices = [DigitalOutputDevice(p, initial_value=False) for p in PINS]
+# Set GPIO mode and configure pins
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(IN1, GPIO.OUT)
+GPIO.setup(IN2, GPIO.OUT)
+GPIO.setup(IN3, GPIO.OUT)
+GPIO.setup(IN4, GPIO.OUT)
 
-print("开始轮流点亮 4 个输出，每个 1 秒 HIGH / 0.5 秒 LOW")
-print("请观察 L298N 板子上的 IN/OUT LED 以及电机是否有吸住/抖动")
-print("Ctrl + C 可以随时停止\n")
+# Constants for stepper motor control
+DEG_PER_STEP = 1.8
+STEP_PER_REVOLUTION = int(360 / DEG_PER_STEP)
+
+# Function to move the stepper motor one step forward
+def step_forward(delay, steps):
+    for _ in range(steps):
+        GPIO.output(IN1, GPIO.HIGH)
+        GPIO.output(IN2, GPIO.HIGH)
+        GPIO.output(IN3, GPIO.LOW)
+        GPIO.output(IN4, GPIO.LOW)
+        time.sleep(delay)
+        
+        GPIO.output(IN1, GPIO.LOW)
+        GPIO.output(IN2, GPIO.HIGH)
+        GPIO.output(IN3, GPIO.HIGH)
+        GPIO.output(IN4, GPIO.LOW)
+        time.sleep(delay)
+
+# Function to move the stepper motor one step backward
+def step_backward(delay, steps):
+    for _ in range(steps):
+        GPIO.output(IN1, GPIO.LOW)
+        GPIO.output(IN2, GPIO.LOW)
+        GPIO.output(IN3, GPIO.HIGH)
+        GPIO.output(IN4, GPIO.HIGH)
+        time.sleep(delay)
+        
+        GPIO.output(IN1, GPIO.HIGH)
+        GPIO.output(IN2, GPIO.LOW)
+        GPIO.output(IN3, GPIO.LOW)
+        GPIO.output(IN4, GPIO.HIGH)
+        time.sleep(delay)
 
 try:
+    # Set the delay between steps
+    delay = 0.001
     while True:
-        for i, dev in enumerate(devices):
-            print(f"GPIO {PINS[i]} -> HIGH")
-            dev.on()
-            time.sleep(1.0)
+        # Move the stepper motor one revolution in a clockwise direction
+        step_forward(delay, STEP_PER_REVOLUTION)
 
-            print(f"GPIO {PINS[i]} -> LOW")
-            dev.off()
-            time.sleep(0.5)
+        # Pause for 5 seconds
+        time.sleep(5)
+
+        # Move the stepper motor one revolution in an anticlockwise direction
+        step_backward(delay, STEP_PER_REVOLUTION)
+
+        # Halt for 5 seconds
+        time.sleep(5)
 
 except KeyboardInterrupt:
-    print("\n用户中断，全部拉低输出。")
+    print("\nExiting the script.")
+
 finally:
-    for dev in devices:
-        dev.off()
-    print("结束。")
+    # Clean up GPIO settings
+    GPIO.cleanup()
