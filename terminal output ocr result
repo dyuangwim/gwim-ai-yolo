@@ -1,35 +1,5 @@
 (ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/stepper_test.py
-开始轮流点亮 4 个输出，每个 1 秒 HIGH / 0.5 秒 LOW
-请观察 L298N 板子上的 IN/OUT LED 以及电机是否有吸住/抖动
-Ctrl + C 可以随时停止
-
-GPIO 5 -> HIGH
-GPIO 5 -> LOW
-GPIO 6 -> HIGH
-GPIO 6 -> LOW
-GPIO 13 -> HIGH
-GPIO 13 -> LOW
-GPIO 19 -> HIGH
-GPIO 19 -> LOW
-GPIO 5 -> HIGH
-GPIO 5 -> LOW
-GPIO 6 -> HIGH
-GPIO 6 -> LOW
-GPIO 13 -> HIGH
-GPIO 13 -> LOW
-GPIO 19 -> HIGH
-GPIO 19 -> LOW
-GPIO 5 -> HIGH
-GPIO 5 -> LOW
-GPIO 6 -> HIGH
-GPIO 6 -> LOW
-GPIO 13 -> HIGH
-GPIO 13 -> LOW
-GPIO 19 -> HIGH
-GPIO 19 -> LOW
-GPIO 5 -> HIGH
-GPIO 5 -> LOW
-GPIO 6 -> HIGH
-^C
-用户中断，全部拉低输出。
-结束。
+Traceback (most recent call last):
+  File "/home/pi/battery_batch/stepper_test.py", line 20, in <module>
+    GPIO.setup(IN1, GPIO.OUT)
+RuntimeError: Cannot determine SOC peripheral base address
