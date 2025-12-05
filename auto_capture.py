@@ -1,12 +1,18 @@
 # auto_capture.py
-# VERSION: 2024-11-17-v3-BUGFIX + STEPPER-WIPER
+# VERSION: 2024-11-17-v3-BUGFIX + STEPPER-WIPER-FIX
 import os, time, cv2, json, glob, subprocess, warnings, argparse, threading, signal, atexit, sys
 from datetime import datetime
 from picamera2 import Picamera2
 from gpiozero import DistanceSensor
 from gpiozero.input_devices import DistanceSensorNoEcho
 from gpiozero import LED as StatusLED
-from utils_hw import Buzzer, StepperDM556
+
+from utils_hw import (
+    Buzzer,
+    init_stepper_dm556,
+    stepper_move_degrees,
+    close_stepper_dm556,
+)
 
 warnings.filterwarnings("ignore", category=DistanceSensorNoEcho)
 
@@ -27,10 +33,10 @@ _ALARM_THREAD = None
 _ALARM_STOP_EVT = None
 _SHUTDOWN_FLAG = False
 _STATUS_LED = None
-_STEPPER: StepperDM556 | None = None
+_STEPPER_ENABLED = False  # 是否成功初始化了步进电机
 
 
-def _init_status_led(pin: int | None):
+def _init_status_led(pin: int = None):
     """
     初始化状态 LED（拍照后闪烁用）
     pin = None 或 pin < 0 表示不启用
@@ -95,33 +101,30 @@ def _init_stepper(args):
     初始化步进电机（DM556 + NEMA23）。
     如果加 --no_stepper 则完全禁用。
     """
-    global _STEPPER
+    global _STEPPER_ENABLED
     if getattr(args, "no_stepper", False):
         print("[Stepper] Disabled by --no_stepper flag.", flush=True)
-        _STEPPER = None
+        _STEPPER_ENABLED = False
         return
 
-    try:
-        _STEPPER = StepperDM556(
-            step_pin=args.stepper_step_pin,
-            dir_pin=args.stepper_dir_pin,
-            microstep=args.stepper_microstep,
-        )
-    except Exception as e:
-        print(f"[Stepper] Failed to init stepper: {e}", flush=True)
-        _STEPPER = None
+    ok = init_stepper_dm556(
+        step_pin=args.stepper_step_pin,
+        dir_pin=args.stepper_dir_pin,
+        microstep=args.stepper_microstep,
+    )
+    _STEPPER_ENABLED = ok
 
 
 def _stepper_close():
     """释放步进电机 GPIO"""
-    global _STEPPER
-    if _STEPPER is None:
+    global _STEPPER_ENABLED
+    if not _STEPPER_ENABLED:
         return
     try:
-        _STEPPER.close()
+        close_stepper_dm556()
     except Exception:
         pass
-    _STEPPER = None
+    _STEPPER_ENABLED = False
 
 
 def stepper_wiper_swing(degrees: float = 90.0, speed_rps: float = 0.3):
@@ -130,20 +133,20 @@ def stepper_wiper_swing(degrees: float = 90.0, speed_rps: float = 0.3):
     - 先逆时针转 degrees°
     - 再顺时针转回来 degrees°
     """
-    global _STEPPER
-    if _STEPPER is None:
+    global _STEPPER_ENABLED
+    if not _STEPPER_ENABLED:
         # 没有硬件或初始化失败就直接跳过
         return
 
     try:
         print(f"[Stepper] Wiper swing start: {degrees}° ↔, speed={speed_rps} rev/s", flush=True)
 
-        # 1) 先逆向
-        _STEPPER.move_degrees(degrees, clockwise=False, speed_rps=speed_rps)
+        # 1) 先逆向（注意这里还是复用了你测试时的 clockwise=False）
+        stepper_move_degrees(degrees, clockwise=False, speed_rps=speed_rps)
         time.sleep(0.1)  # 机械缓冲
 
-        # 2) 再转回原位
-        _STEPPER.move_degrees(degrees, clockwise=True, speed_rps=speed_rps)
+        # 2) 再顺时针转回来
+        stepper_move_degrees(degrees, clockwise=True, speed_rps=speed_rps)
 
         print("[Stepper] Wiper swing done.", flush=True)
     except Exception as e:
@@ -236,7 +239,7 @@ def parse_args():
     ap.add_argument(
         "--stepper_deg",
         type=float,
-        default=90.0,
+        default=90.0,   # 👉 如果你觉得 90° 太多，就把这里改成 45.0 等
         help="Wiper swing angle in degrees (one side). Default=90",
     )
     ap.add_argument(
@@ -460,7 +463,7 @@ def main():
     global _ALARM_THREAD, _ALARM_STOP_EVT
 
     print("=" * 60, flush=True)
-    print("VERSION: 2024-11-17-v3-BUGFIX + STEPPER-WIPER", flush=True)
+    print("VERSION: 2024-11-17-v3-BUGFIX + STEPPER-WIPER-FIX", flush=True)
     print("=" * 60, flush=True)
 
     args = parse_args()
