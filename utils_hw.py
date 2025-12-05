@@ -12,6 +12,7 @@ try:
 except Exception:
     _HAS_GZ = False
 
+# ========== Trigger（保持你原来的逻辑）==========
 
 class Trigger:
     """
@@ -31,8 +32,8 @@ class Trigger:
             except Exception:
                 self.device = None
 
-        def __repr__(self) -> str:
-            return f"<Trigger pin={self.pin} active_high={self.active_high} debounce_ms={self.debounce_ms}>"
+    def __repr__(self) -> str:
+        return f"<Trigger pin={self.pin} active_high={self.active_high} debounce_ms={self.debounce_ms}>"
 
     def wait(self, fallback_seconds: float = 0.0):
         if self.device is None:
@@ -54,6 +55,8 @@ class Trigger:
             last = active
             time.sleep(0.005)
 
+
+# ========== Buzzer（保持你原来的逻辑）==========
 
 class Buzzer:
     """
@@ -110,121 +113,160 @@ class Buzzer:
                 self.dev = None
 
 
-class StepperDM556:
-    """
-    DM556 + NEMA23 步进电机控制封装（基于 gpiozero.DigitalOutputDevice）。
-    默认：
-      - STEP  → BCM5  (接 DM556 PUL-)
-      - DIR   → BCM6  (接 DM556 DIR-)
-      - PUL+ / DIR+ 接 3.3V
-      - MICROSTEP = 8（和你测试脚本一致）
+# ========== DM556 + NEMA23 步进电机（复刻 dm556_test.py 逻辑）==========
 
-    用法示例：
-        m = StepperDM556()
-        m.move_degrees(90, clockwise=True, speed_rps=0.3)
-        m.close()
-    """
+# 这些全局变量等价于你 dm556_test.py 里的 STEP_PIN / DIR_PIN / STEPS_PER_REV 等
+_STEPPER_STEP_DEVICE = None
+_STEPPER_DIR_DEVICE = None
+_STEPPER_STEPS_PER_REV = None   # 运行时由 init 函数计算
+_STEPPER_MICROSTEP = None
 
-    def __init__(
-        self,
-        step_pin: int = 5,
-        dir_pin: int = 6,
-        microstep: int = 8,
+
+def init_stepper_dm556(step_pin: int = 5, dir_pin: int = 6, microstep: int = 8):
+    """
+    初始化 DM556 步进电机控制（完全复刻 dm556_test.py 的逻辑）：
+
+    - step_pin = BCM5  (接 DM556 PUL-)
+    - dir_pin  = BCM6  (接 DM556 DIR-)
+    - PUL+ / DIR+ 接 3.3V
+    - microstep = 8 需要和 DM556 DIP 开关一致
+    """
+    global _STEPPER_STEP_DEVICE, _STEPPER_DIR_DEVICE
+    global _STEPPER_STEPS_PER_REV, _STEPPER_MICROSTEP
+
+    if not _HAS_GZ:
+        print("[Stepper] gpiozero not available, stepper disabled.", flush=True)
+        _STEPPER_STEP_DEVICE = None
+        _STEPPER_DIR_DEVICE = None
+        _STEPPER_STEPS_PER_REV = None
+        return False
+
+    _STEPPER_MICROSTEP = int(microstep) if microstep and microstep > 0 else 8
+    _STEPPER_STEPS_PER_REV = 200 * _STEPPER_MICROSTEP  # 1.8° → 200 步 / 圈
+
+    try:
+        _STEPPER_STEP_DEVICE = DigitalOutputDevice(step_pin, initial_value=False)
+        _STEPPER_DIR_DEVICE = DigitalOutputDevice(dir_pin, initial_value=False)
+        print(
+            f"[Stepper] DM556 initialized (STEP=BCM{step_pin}, DIR=BCM{dir_pin}, MICROSTEP={_STEPPER_MICROSTEP})",
+            flush=True,
+        )
+        return True
+    except Exception as e:
+        print(f"[Stepper] Failed to init stepper on GPIO {step_pin}/{dir_pin}: {e}", flush=True)
+        _STEPPER_STEP_DEVICE = None
+        _STEPPER_DIR_DEVICE = None
+        _STEPPER_STEPS_PER_REV = None
+        return False
+
+
+def _stepper_pulse_step(delay: float):
+    """发送一个 step 脉冲（复刻 dm556_test.py 的 pulse_step）"""
+    global _STEPPER_STEP_DEVICE
+    if _STEPPER_STEP_DEVICE is None:
+        return
+    _STEPPER_STEP_DEVICE.on()
+    time.sleep(delay)
+    _STEPPER_STEP_DEVICE.off()
+    time.sleep(delay)
+
+
+def stepper_move_steps(steps: int, clockwise: bool = True, speed_rps: float = 0.2):
+    """
+    走指定步数（和 dm556_test.py 的 move_steps 一样）：
+
+    - steps: 行走多少步（与 STEPS_PER_REV 同单位）
+    - clockwise: True=顺时针，False=逆时针
+    - speed_rps: 每秒多少圈（0.2 = 慢速）
+    """
+    global _STEPPER_STEP_DEVICE, _STEPPER_DIR_DEVICE, _STEPPER_STEPS_PER_REV
+
+    if (
+        _STEPPER_STEP_DEVICE is None
+        or _STEPPER_DIR_DEVICE is None
+        or _STEPPER_STEPS_PER_REV is None
     ):
-        self.step_pin = step_pin
-        self.dir_pin = dir_pin
-        self.microstep = microstep
-        self.base_steps_per_rev = 200  # 1.8° → 200 steps / rev
-        self.steps_per_rev = self.base_steps_per_rev * self.microstep
+        print("[Stepper] No hardware, skip stepper_move_steps.", flush=True)
+        return
 
-        self.step = None
-        self.direction = None
+    if steps <= 0:
+        return
+    if speed_rps <= 0:
+        speed_rps = 0.2
 
-        if not _HAS_GZ:
-            print("[Stepper] gpiozero not available, stepper disabled.", flush=True)
-            return
+    # 设置方向（完全复刻 dm556_test.py）
+    try:
+        _STEPPER_DIR_DEVICE.value = 1 if clockwise else 0
+    except Exception as e:
+        print(f"[Stepper] Failed to set direction: {e}", flush=True)
+        return
 
-        try:
-            self.step = DigitalOutputDevice(self.step_pin, initial_value=False)
-            self.direction = DigitalOutputDevice(self.dir_pin, initial_value=False)
-            print(
-                f"[Stepper] DM556 initialized (STEP={self.step_pin}, DIR={self.dir_pin}, MICROSTEP={self.microstep})",
-                flush=True,
-            )
-        except Exception as e:
-            print(f"[Stepper] Failed to init stepper on GPIO {self.step_pin}/{self.dir_pin}: {e}", flush=True)
-            self.step = None
-            self.direction = None
+    # 计算延迟（完全复刻 dm556_test.py）
+    steps_per_sec = _STEPPER_STEPS_PER_REV * speed_rps
+    delay = 1.0 / steps_per_sec / 2.0
 
-    def _pulse_step(self, delay: float):
-        """发送一个 step 脉冲"""
-        if self.step is None:
-            return
-        self.step.on()
-        time.sleep(delay)
-        self.step.off()
-        time.sleep(delay)
+    for _ in range(int(steps)):
+        _stepper_pulse_step(delay)
 
-    def move_steps(self, steps: int, clockwise: bool = True, speed_rps: float = 0.2):
-        """
-        steps: 走多少步（与 steps_per_rev 同单位）
-        clockwise: True=顺时针，False=逆时针
-        speed_rps: 每秒多少圈（0.2 = 慢速度，适合测试）
-        """
-        if self.step is None or self.direction is None:
-            print("[Stepper] No hardware, skip move_steps.", flush=True)
-            return
-        if steps <= 0:
-            return
-        if speed_rps <= 0:
-            speed_rps = 0.2
 
-        # 设置方向
-        try:
-            self.direction.value = 1 if clockwise else 0
-        except Exception as e:
-            print(f"[Stepper] Failed to set direction: {e}", flush=True)
-            return
+def stepper_move_degrees(degrees: float, clockwise: bool = True, speed_rps: float = 0.2):
+    """
+    按角度转动（完全复刻 dm556_test.py 的 move_degrees）：
 
-        # 计算每个脉冲的延迟
-        steps_per_sec = self.steps_per_rev * speed_rps
-        delay = 1.0 / steps_per_sec / 2.0  # 一个完整方波周期 = 2 * delay
+    - degrees: 例如 90, 45, 180
+    """
+    global _STEPPER_STEPS_PER_REV
 
-        for _ in range(int(steps)):
-            self._pulse_step(delay)
+    if _STEPPER_STEPS_PER_REV is None:
+        print("[Stepper] Not initialized, skip stepper_move_degrees.", flush=True)
+        return
 
-    def move_degrees(self, degrees: float, clockwise: bool = True, speed_rps: float = 0.2):
-        """按角度转动（例如 90°, 45°）"""
-        if degrees == 0:
-            return
-        ratio = float(degrees) / 360.0
-        steps = int(self.steps_per_rev * ratio)
-        self.move_steps(steps, clockwise=clockwise, speed_rps=speed_rps)
+    if degrees == 0:
+        return
 
-    def close(self):
-        """释放 GPIO 资源"""
-        try:
-            if self.step is not None:
-                try:
-                    self.step.off()
-                except Exception:
-                    pass
-                self.step.close()
-        except Exception:
-            pass
-        finally:
-            self.step = None
+    ratio = abs(degrees) / 360.0
+    steps = int(_STEPPER_STEPS_PER_REV * ratio)
+    if steps <= 0:
+        return
 
-        try:
-            if self.direction is not None:
-                try:
-                    self.direction.off()
-                except Exception:
-                    pass
-                self.direction.close()
-        except Exception:
-            pass
-        finally:
-            self.direction = None
+    # 如果传进来是负角度，就反向
+    cw = clockwise
+    if degrees < 0:
+        cw = not cw
 
-        print("[Stepper] Closed and GPIO released.", flush=True)
+    stepper_move_steps(steps, clockwise=cw, speed_rps=speed_rps)
+
+
+def close_stepper_dm556():
+    """释放步进电机 GPIO 资源"""
+    global _STEPPER_STEP_DEVICE, _STEPPER_DIR_DEVICE
+    global _STEPPER_STEPS_PER_REV, _STEPPER_MICROSTEP
+
+    try:
+        if _STEPPER_STEP_DEVICE is not None:
+            try:
+                _STEPPER_STEP_DEVICE.off()
+            except Exception:
+                pass
+            _STEPPER_STEP_DEVICE.close()
+    except Exception:
+        pass
+    finally:
+        _STEPPER_STEP_DEVICE = None
+
+    try:
+        if _STEPPER_DIR_DEVICE is not None:
+            try:
+                _STEPPER_DIR_DEVICE.off()
+            except Exception:
+                pass
+            _STEPPER_DIR_DEVICE.close()
+    except Exception:
+        pass
+    finally:
+        _STEPPER_DIR_DEVICE = None
+
+    _STEPPER_STEPS_PER_REV = None
+    _STEPPER_MICROSTEP = None
+
+    print("[Stepper] Closed and GPIO released.", flush=True)
