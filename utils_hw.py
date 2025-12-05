@@ -12,6 +12,7 @@ try:
 except Exception:
     _HAS_GZ = False
 
+
 # ========== Trigger（保持你原来的逻辑）==========
 
 class Trigger:
@@ -115,7 +116,6 @@ class Buzzer:
 
 # ========== DM556 + NEMA23 步进电机（复刻 dm556_test.py 逻辑）==========
 
-# 这些全局变量等价于你 dm556_test.py 里的 STEP_PIN / DIR_PIN / STEPS_PER_REV 等
 _STEPPER_STEP_DEVICE = None
 _STEPPER_DIR_DEVICE = None
 _STEPPER_STEPS_PER_REV = None   # 运行时由 init 函数计算
@@ -161,7 +161,7 @@ def init_stepper_dm556(step_pin: int = 5, dir_pin: int = 6, microstep: int = 8):
 
 
 def _stepper_pulse_step(delay: float):
-    """发送一个 step 脉冲（复刻 dm556_test.py 的 pulse_step）"""
+    """发送一个 step 脉冲"""
     global _STEPPER_STEP_DEVICE
     if _STEPPER_STEP_DEVICE is None:
         return
