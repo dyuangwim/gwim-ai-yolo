@@ -130,23 +130,24 @@ def _stepper_close():
 def stepper_wiper_swing(degrees: float = 90.0, speed_rps: float = 0.3):
     """
     步进电机做一次“雨刮器”摆动：
-    - 先逆时针转 degrees°
-    - 再顺时针转回来 degrees°
+    - 先你眼睛看到的“逆向”转 degrees°
+    - 再“顺向”转回来 degrees°
     """
     global _STEPPER_ENABLED
     if not _STEPPER_ENABLED:
-        # 没有硬件或初始化失败就直接跳过
         return
 
     try:
         print(f"[Stepper] Wiper swing start: {degrees}° ↔, speed={speed_rps} rev/s", flush=True)
 
-        # 1) 先逆向（注意这里还是复用了你测试时的 clockwise=False）
-        stepper_move_degrees(degrees, clockwise=False, speed_rps=speed_rps)
-        time.sleep(0.1)  # 机械缓冲
-
-        # 2) 再顺时针转回来
+        # ✅ 1）先用现在看起来是“逆时针”的方向
+        #    你现在看到的“逆时针”其实是 clockwise=True
         stepper_move_degrees(degrees, clockwise=True, speed_rps=speed_rps)
+        time.sleep(0.1)
+
+        # ✅ 2）再用现在看起来是“顺时针”的方向转回来
+        #    你现在看到的“顺时针”其实是 clockwise=False
+        stepper_move_degrees(degrees, clockwise=False, speed_rps=speed_rps)
 
         print("[Stepper] Wiper swing done.", flush=True)
     except Exception as e:
@@ -579,3 +580,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
