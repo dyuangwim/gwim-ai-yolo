@@ -1,5 +1,31 @@
-(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/stepper_test.py
-Traceback (most recent call last):
-  File "/home/pi/battery_batch/stepper_test.py", line 20, in <module>
-    GPIO.setup(IN1, GPIO.OUT)
-RuntimeError: Cannot determine SOC peripheral base address
+(ai-env) pi@raspberrypi:~ $ python3 /home/pi/battery_batch/factory_gui.py
+[GUI] Starting inspection with expected=4
+[GUI] Process started with PID: 2858
+[GUI] Inspection started successfully
+[LogReader] 🔔 Buzzer GPIO (BCM): 21（有 NG 时将持续报警，GUI 点『Stop Alarm』静音）
+[LogReader] Done. Cards: 3 | NG: 2 | Time: 666.3 ms
+[LogReader] Emitting result: NG=2
+[GUI] New result received: NG=2
+[GUI] NG detected, activating alarm UI
+[LogReader] [Main] Detection complete: NG count = 2
+[LogReader] [Main] ⚠️⚠️⚠️ NG detected, starting alarm... ⚠️⚠️⚠️
+[LogReader] [Alarm] 🔊🔊🔊 Buzzer ON - continuous alarm started 🔊🔊🔊
+[LogReader] [WaitAlarm] Waiting for stop signal from GUI...
+[GUI] Stop alarm requested
+[GUI] Sending newline to stop alarm
+[GUI] Stop alarm signal sent
+[LogReader] [WaitAlarm] Received data from stdin: '\n'
+[LogReader] [WaitAlarm] Stop signal received (newline)
+[LogReader] [WaitAlarm] Wait finished
+[LogReader] [Alarm] 🔇 Buzzer OFF - alarm stopped 🔇
+[GUI] Stop inspection requested
+[GUI] Stopping process PID: 2858
+[GUI] Sending newline to stdin
+[GUI] SIGINT sent
+[GUI] Process ended gracefully
+[GUI] Failsafe GPIO off (handled by worker process now)
+[GUI] Stop inspection complete
+[GUI] Process exited with code: 0
+[GUI] Close event triggered
+[GUI] Stop inspection requested
+[GUI] No process to stop
