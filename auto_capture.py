@@ -240,7 +240,7 @@ def parse_args():
     ap.add_argument(
         "--stepper_deg",
         type=float,
-        default=90.0,   # 👉 如果你觉得 90° 太多，就把这里改成 45.0 等
+        default=70.0,   # 👉 如果你觉得 90° 太多，就把这里改成 45.0 等
         help="Wiper swing angle in degrees (one side). Default=90",
     )
     ap.add_argument(
@@ -580,4 +580,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
