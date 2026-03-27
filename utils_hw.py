@@ -1,7 +1,7 @@
 # utils_hw.py
 import time
 
-# 使用 gpiozero，在 Raspberry Pi 5 + python3-lgpio 环境下工作良好
+# Using gpiozero, it works well in a Raspberry Pi 5 + python3-lgpio environment.
 try:
     from gpiozero import (
         DigitalInputDevice,
@@ -13,11 +13,11 @@ except Exception:
     _HAS_GZ = False
 
 
-# ========== Trigger（保持你原来的逻辑）==========
+# ========== Trigger (Keep your original logic)==========
 
 class Trigger:
     """
-    光电/接近传感器触发（低电平/高电平均可配置）。无硬件时退化为延时等待。
+    Photoelectric/proximity sensor trigger (configurable for both low and high levels). Degrades to a delay wait when no hardware is available.
     """
 
     def __init__(self, pin: int = None, active_high: bool = True, debounce_ms: int = 60):
@@ -57,13 +57,13 @@ class Trigger:
             time.sleep(0.005)
 
 
-# ========== Buzzer（保持你原来的逻辑）==========
+# ========== Buzzer==========
 
 class Buzzer:
     """
-    简单蜂鸣器输出。
-    - pin: BCM 引脚号（例如 21）
-    - active_high: True 表示输出高电平时蜂鸣器响
+    Simple buzzer output.
+    - pin: BCM pin number (e.g., 21)
+    - active_high: True The buzzer sounds when the output is high.
     """
 
     def __init__(self, pin: int = None, active_high: bool = True):
@@ -74,7 +74,7 @@ class Buzzer:
         if _HAS_GZ and pin is not None:
             try:
                 self.dev = GZBuzzer(pin, active_high=active_high)
-                self.off()   # 确保上电时不响
+                self.off()   # Make sure it doesn't make a sound when powered on.
             except Exception:
                 self.dev = None
 
@@ -114,22 +114,22 @@ class Buzzer:
                 self.dev = None
 
 
-# ========== DM556 + NEMA23 步进电机（复刻 dm556_test.py 逻辑）==========
+# ========== DM556 + NEMA23 Stepper motor==========
 
 _STEPPER_STEP_DEVICE = None
 _STEPPER_DIR_DEVICE = None
-_STEPPER_STEPS_PER_REV = None   # 运行时由 init 函数计算
+_STEPPER_STEPS_PER_REV = None 
 _STEPPER_MICROSTEP = None
 
 
 def init_stepper_dm556(step_pin: int = 5, dir_pin: int = 6, microstep: int = 8):
     """
-    初始化 DM556 步进电机控制（完全复刻 dm556_test.py 的逻辑）：
+    Initialize the DM556 stepper motor control:
 
-    - step_pin = BCM5  (接 DM556 PUL-)
-    - dir_pin  = BCM6  (接 DM556 DIR-)
-    - PUL+ / DIR+ 接 3.3V
-    - microstep = 8 需要和 DM556 DIP 开关一致
+    - step_pin = BCM5  (connects to DM556 PUL-)
+    - dir_pin  = BCM6  (connects to DM556 DIR-)
+    - PUL+ / DIR+ connect to 3.3V
+    - microstep = 8 must match the DM556 DIP switch settings
     """
     global _STEPPER_STEP_DEVICE, _STEPPER_DIR_DEVICE
     global _STEPPER_STEPS_PER_REV, _STEPPER_MICROSTEP
@@ -142,7 +142,7 @@ def init_stepper_dm556(step_pin: int = 5, dir_pin: int = 6, microstep: int = 8):
         return False
 
     _STEPPER_MICROSTEP = int(microstep) if microstep and microstep > 0 else 8
-    _STEPPER_STEPS_PER_REV = 200 * _STEPPER_MICROSTEP  # 1.8° → 200 步 / 圈
+    _STEPPER_STEPS_PER_REV = 200 * _STEPPER_MICROSTEP  # 1.8° → 200 steps / revolution
 
     try:
         _STEPPER_STEP_DEVICE = DigitalOutputDevice(step_pin, initial_value=False)
@@ -161,7 +161,7 @@ def init_stepper_dm556(step_pin: int = 5, dir_pin: int = 6, microstep: int = 8):
 
 
 def _stepper_pulse_step(delay: float):
-    """发送一个 step 脉冲"""
+    """Send a step pulse"""
     global _STEPPER_STEP_DEVICE
     if _STEPPER_STEP_DEVICE is None:
         return
@@ -173,11 +173,11 @@ def _stepper_pulse_step(delay: float):
 
 def stepper_move_steps(steps: int, clockwise: bool = True, speed_rps: float = 0.2):
     """
-    走指定步数（和 dm556_test.py 的 move_steps 一样）：
+    Move a specified number of steps:
 
-    - steps: 行走多少步（与 STEPS_PER_REV 同单位）
-    - clockwise: True=顺时针，False=逆时针
-    - speed_rps: 每秒多少圈（0.2 = 慢速）
+    - steps: Number of steps to move (in the same units as STEPS_PER_REV)
+    - clockwise: True=clockwise, False=counter-clockwise
+    - speed_rps: Revolutions per second (0.2 = slow)
     """
     global _STEPPER_STEP_DEVICE, _STEPPER_DIR_DEVICE, _STEPPER_STEPS_PER_REV
 
@@ -194,14 +194,14 @@ def stepper_move_steps(steps: int, clockwise: bool = True, speed_rps: float = 0.
     if speed_rps <= 0:
         speed_rps = 0.2
 
-    # 设置方向（完全复刻 dm556_test.py）
+    # Set direction
     try:
         _STEPPER_DIR_DEVICE.value = 1 if clockwise else 0
     except Exception as e:
         print(f"[Stepper] Failed to set direction: {e}", flush=True)
         return
 
-    # 计算延迟（完全复刻 dm556_test.py）
+    # Calculate delay
     steps_per_sec = _STEPPER_STEPS_PER_REV * speed_rps
     delay = 1.0 / steps_per_sec / 2.0
 
@@ -211,9 +211,9 @@ def stepper_move_steps(steps: int, clockwise: bool = True, speed_rps: float = 0.
 
 def stepper_move_degrees(degrees: float, clockwise: bool = True, speed_rps: float = 0.2):
     """
-    按角度转动（完全复刻 dm556_test.py 的 move_degrees）：
+    Move by a specified number of degrees:
 
-    - degrees: 例如 90, 45, 180
+    - degrees: for example, 90, 45, 180
     """
     global _STEPPER_STEPS_PER_REV
 
@@ -229,7 +229,7 @@ def stepper_move_degrees(degrees: float, clockwise: bool = True, speed_rps: floa
     if steps <= 0:
         return
 
-    # 如果传进来是负角度，就反向
+    # If the incoming angle is negative, then reverse it.
     cw = clockwise
     if degrees < 0:
         cw = not cw
@@ -238,7 +238,7 @@ def stepper_move_degrees(degrees: float, clockwise: bool = True, speed_rps: floa
 
 
 def close_stepper_dm556():
-    """释放步进电机 GPIO 资源"""
+    """Release stepper motor GPIO resources"""
     global _STEPPER_STEP_DEVICE, _STEPPER_DIR_DEVICE
     global _STEPPER_STEPS_PER_REV, _STEPPER_MICROSTEP
 
