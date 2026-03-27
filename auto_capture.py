@@ -1,5 +1,3 @@
-# auto_capture.py
-# VERSION: 2024-11-17-v3-BUGFIX + STEPPER-WIPER-FIX
 import os, time, cv2, json, glob, subprocess, warnings, argparse, threading, signal, atexit, sys
 from datetime import datetime
 from picamera2 import Picamera2
@@ -26,7 +24,7 @@ TRIG_PIN, ECHO_PIN, MAX_DISTANCE_M = 23, 24, 1.0
 os.makedirs(SAVE_DIR, exist_ok=True); os.makedirs(OUT_DIR, exist_ok=True)
 sensor = DistanceSensor(echo=ECHO_PIN, trigger=TRIG_PIN, max_distance=MAX_DISTANCE_M)
 
-# ---------- 全局：蜂鸣器 / 报警线程 / LED / 步进配置 ----------
+# ---------- Global: Buzzer / Alarm Thread / LED / Step Configuration ----------
 _BUZZER = None
 _ALARM_THREAD = None
 _ALARM_STOP_EVT = None
@@ -37,12 +35,12 @@ _STEPPER_ENABLED = False
 _STEPPER_CFG = dict(step_pin=5, dir_pin=6, microstep=8)
 
 
-# ========== LED 相关 ==========
+# ========== LED related ==========
 
 def _init_status_led(pin: int = None):
     """
-    初始化状态 LED（拍照后闪烁用）
-    pin = None 或 pin < 0 表示不启用
+    Initialization status LED (blinks after taking a picture)
+    pin = None or pin < 0 indicates it is not enabled.
     """
     global _STATUS_LED
     if pin is None or pin < 0:
@@ -61,7 +59,7 @@ def _init_status_led(pin: int = None):
 
 def _led_blink(times: int = 2, on_ms: int = 120, off_ms: int = 120):
     """
-    让状态 LED 闪几下，用于“拍照完成”提示。
+    Let the status LED blink a few times, used for "photo taken" notification.
     """
     global _STATUS_LED
     if _STATUS_LED is None:
@@ -80,7 +78,7 @@ def _led_blink(times: int = 2, on_ms: int = 120, off_ms: int = 120):
 
 def _led_close():
     """
-    进程退出时关闭并释放 LED
+    Turn off and release LED when process exits
     """
     global _STATUS_LED
     if _STATUS_LED is None:
@@ -99,13 +97,13 @@ def _led_close():
     _STATUS_LED = None
 
 
-# ========== 步进电机相关 ==========
+# ========== Stepper Motor Related ==========
 
 def _init_stepper(args):
     """
-    初始化步进电机（DM556 + NEMA23）。
-    这里只保存配置，并做一次“空初始化测试”，
-    真正的动作在每次 stepper_wiper_swing 里重新 init/close，避免第一次状态异常。
+    Initialize the stepper motor (DM556 + NEMA23).
+    Here we only save the configuration and do a "warm-up test",
+    The actual actions are initiated/closed again in each stepper_wiper_swing to avoid the first state being abnormal.
     """
     global _STEPPER_ENABLED, _STEPPER_CFG
 
@@ -120,7 +118,7 @@ def _init_stepper(args):
         microstep=args.stepper_microstep,
     )
 
-    # 做一次初始化+关闭测试，确认 wiring 正常
+    # Perform an initialization and shutdown test to confirm that wiring is working correctly.
     ok = init_stepper_dm556(**_STEPPER_CFG)
     if ok:
         print("[Stepper] Initial test OK, closing warm-up instance.", flush=True)
@@ -132,7 +130,7 @@ def _init_stepper(args):
 
 
 def _stepper_close():
-    """进程退出时释放步进电机 GPIO（保险起见再关一下）"""
+    """Release the stepper motor GPIO when the process exits (to be on the safe side, turn it off again)."""
     global _STEPPER_ENABLED
     try:
         close_stepper_dm556()
@@ -143,54 +141,54 @@ def _stepper_close():
 
 def stepper_wiper_swing(degrees: float = 90.0, speed_rps: float = 0.3):
     """
-    步进电机做一次“雨刮器”摆动：
-    - 先逆向转 degrees°
-    - 再顺向转回来 degrees°
+    The stepper motor performs one "windshield wiper" oscillation:
+    - First, rotate counter-clockwise by degrees°
+    - Then rotate clockwise back by degrees°
 
-    ❗注意：
-    为了避免你遇到的「第一次只转一边、第二次才正常」的问题，
-    这里每一次调用都会：
-      1. init_stepper_dm556(...)
-      2. 转出去
-      3. 再转回来
-      4. close_stepper_dm556()
-    这样每一轮状态都是干净的。
+    ❗Note:
+    To avoid the problem of "only rotating one side the first time, and then working correctly the second time,"
+    each call here will:
+    1. init_stepper_dm556(...)
+    2. Rotate outwards
+    3. Rotate backwards
+    4. close_stepper_dm556()
+    This ensures a clean state for each cycle.
     """
     global _STEPPER_ENABLED, _STEPPER_CFG
     if not _STEPPER_ENABLED:
         return
 
     try:
-        # 每次先初始化（新建一套 GPIOZero 对象）
+        # Each time, initialize first (create a new set of GPIOZero objects).
         if not init_stepper_dm556(**_STEPPER_CFG):
             print("[Stepper] init failed inside wiper_swing, skip.", flush=True)
             return
 
         print(f"[Stepper] Wiper swing start: {degrees}° ↔, speed={speed_rps} rev/s", flush=True)
 
-        # 1）先“逆向”
-        #    如果你看到方向反了，可以把 clockwise=True / False 对调
+        # 1）First, "reverse" the process.
+        #    If you see that the direction is reversed, you can swap clockwise=True/False.
         stepper_move_degrees(degrees, clockwise=False, speed_rps=speed_rps)
         time.sleep(0.1)
 
-        # 2）再“顺向”转回来
+        # 2）Then turn back "forward".
         stepper_move_degrees(degrees, clockwise=True, speed_rps=speed_rps)
 
         print("[Stepper] Wiper swing done.", flush=True)
     except Exception as e:
         print(f"[Stepper] Error during wiper swing: {e}", flush=True)
     finally:
-        # 每次用完都释放 GPIO
+        # Each time, release the GPIO
         try:
             close_stepper_dm556()
         except Exception:
             pass
 
 
-# ========== 蜂鸣器 / 报警 ==========
+# ========== Buzzer / Alarm ==========
 
 def _alarm_quietly():
-    """仅停止报警：停线程 + 拉低；不释放GPIO。"""
+    """Stop alarms only: stop the thread + pull low; do not release GPIO."""
     global _ALARM_THREAD, _ALARM_STOP_EVT, _BUZZER
     try:
         if _ALARM_STOP_EVT: 
@@ -209,7 +207,7 @@ def _alarm_quietly():
 
 
 def _buzzer_close_all():
-    """真正退出进程时调用：确保停报警并释放 GPIO。"""
+    """Called when the process truly exits: Ensures alarms are stopped and GPIO is released.。"""
     global _SHUTDOWN_FLAG, _BUZZER
     _SHUTDOWN_FLAG = True
     _alarm_quietly()
@@ -221,7 +219,7 @@ def _buzzer_close_all():
     finally:
         _BUZZER = None
 
-    # 同时释放 LED + 步进电机
+    # Simultaneously release LED + stepper motor
     _led_close()
     _stepper_close()
 
@@ -237,7 +235,7 @@ signal.signal(signal.SIGINT, _handle_signal)
 signal.signal(signal.SIGTERM, _handle_signal)
 
 
-# ========== 其它原有逻辑（参数、拍照、检测、报警）==========
+# ========== Other existing logic (parameters, image capture, detection, alarm)==========
 
 def parse_args():
     ap = argparse.ArgumentParser("Ultrasonic-triggered auto capture + detect")
@@ -247,11 +245,11 @@ def parse_args():
     ap.add_argument("--cooldown", type=float, default=5.0)
     ap.add_argument("--keep_raw", type=int, default=200)
     ap.add_argument("--keep_out", type=int, default=500)
-    # LED 引脚（BCM 号），默认 20；传 -1 表示不用 LED
+    # LED pin (BCM number), default 20; passing -1 indicates that the LED is not used.
     ap.add_argument("--led_pin", type=int, default=20,
                     help="BCM pin for status LED (blink after capture); set -1 to disable")
 
-    # 步进电机参数（DM556 + NEMA23）
+    # Stepper motor parameters (DM556 + NEMA23)
     ap.add_argument(
         "--stepper_step_pin",
         type=int,
@@ -273,7 +271,7 @@ def parse_args():
     ap.add_argument(
         "--stepper_deg",
         type=float,
-        default=90.0,   # 👈 想转少一点，比如 45°，就改这里
+        default=90.0,   # 👈 Turn it slightly less, for example, 45 degrees, change it here.
         help="Wiper swing angle in degrees (one side). Default=90",
     )
     ap.add_argument(
@@ -349,21 +347,21 @@ def run_detection(img_path, base, expected):
 
 def _create_fresh_buzzer(pin: int):
     """
-    === 核心修复函数 ===
-    每次调用都创建全新的蜂鸣器实例
-    这是解决重启后蜂鸣器不响的关键！
+    === Core Fix Function ===
+    Creates a brand new buzzer instance on each call
+    This is the key to resolving the buzzer not working after a restart!
     """
     global _BUZZER
     
     print(f"[BuzzerFix] === Starting fresh buzzer creation on GPIO {pin} ===", flush=True)
     
-    # 步骤 1: 彻底关闭旧实例
+    # Step 1: Completely close the old instance
     if _BUZZER is not None:
         print("[BuzzerFix] Step 1: Closing old buzzer instance.", flush=True)
         try:
-            _BUZZER.off()  # 先拉低
+            _BUZZER.off()  # First pull low
             time.sleep(0.05)
-            _BUZZER.close()  # 释放 GPIO
+            _BUZZER.close()  # Release GPIO
             print("[BuzzerFix] Old buzzer closed successfully", flush=True)
         except Exception as e:
             print(f"[BuzzerFix] Warning: Error closing old buzzer: {e}", flush=True)
@@ -372,21 +370,21 @@ def _create_fresh_buzzer(pin: int):
     else:
         print("[BuzzerFix] Step 1: No old buzzer to close", flush=True)
     
-    # 步骤 2: 等待 GPIO 完全释放
+    # Step 2: Wait for GPIO to be fully released
     print("[BuzzerFix] Step 2: Waiting for GPIO to release.", flush=True)
     time.sleep(0.15)
     
-    # 步骤 3: 创建新实例
+    # Step 3: Create new instance
     print(f"[BuzzerFix] Step 3: Creating NEW buzzer on GPIO {pin}.", flush=True)
     try:
         _BUZZER = Buzzer(pin=pin, active_high=True)
         print("[BuzzerFix] New buzzer created successfully!", flush=True)
         
-        # 步骤 4: 自检测试
+        # Step 4: Self-test
         print("[BuzzerFix] Step 4: Running self-test...", flush=True)
         try:
             _BUZZER.on()
-            time.sleep(0.08)  # 稍微长一点，确保能听到
+            time.sleep(0.08)  # Slightly longer, ensure it's audible
             _BUZZER.off()
             print("[BuzzerFix] ✓ Self-test PASSED (you should have heard a short beep)", flush=True)
         except Exception as e:
@@ -401,7 +399,7 @@ def _create_fresh_buzzer(pin: int):
 
 
 def alarm_continuous_loop(bz: Buzzer, stop_evt: threading.Event):
-    """持续报警：保持 ON，直到 stop_evt 置位"""
+    """Continuous alarm: Remain ON until stop_evt is set."""
     try:
         bz.on()
         print("[Alarm] 🔊🔊🔊 Buzzer ON - continuous alarm started 🔊🔊🔊", flush=True)
@@ -418,7 +416,7 @@ def alarm_continuous_loop(bz: Buzzer, stop_evt: threading.Event):
 
 
 def wait_enter_from_gui(stop_evt: threading.Event, timeout_sec: float = 300.0):
-    """等待 GUI 发送停止信号"""
+    """Wait for stop signal from GUI"""
     global _SHUTDOWN_FLAG
     
     print("[WaitAlarm] Waiting for stop signal from GUI.", flush=True)
@@ -487,12 +485,12 @@ def main():
     global _ALARM_THREAD, _ALARM_STOP_EVT
     
     print("=" * 60, flush=True)
-    print("VERSION: 2024-11-17-v3-BUGFIX + STEPPER-WIPER-FIX", flush=True)
+    print("VERSION: 2026-03-17-v3-BUGFIX + STEPPER-WIPER-FIX", flush=True)
     print("=" * 60, flush=True)
     
     args = parse_args()
 
-    # 初始化状态 LED + 步进电机配置
+    # Initialization status LED + stepper motor configuration
     _init_status_led(args.led_pin)
     _init_stepper(args)
 
@@ -512,7 +510,7 @@ def main():
     buzzer_pin = args.buzzer_pin if args.buzzer_pin and args.buzzer_pin > 0 else None
     
     if buzzer_pin:
-        print(f"🔔 Buzzer GPIO (BCM): {buzzer_pin}（有 NG 时将持续报警，GUI 点『Stop Alarm』静音）", flush=True)
+        print(f"🔔 Buzzer GPIO (BCM): {buzzer_pin}（The alarm will continue to sound if there is an NG (Not Given) error. You can mute it by clicking 'Stop Alarm' in the GUI.）", flush=True)
     else:
         print("🔔 No buzzer GPIO set (no ringing)", flush=True)
     
@@ -528,10 +526,10 @@ def main():
                 
                 img, base = capture_image()
                 
-                # ✅ 拍照完成 → 闪一下状态灯
+                # ✅ Photo taken → Status light flashes once
                 _led_blink(times=2, on_ms=120, off_ms=120)
 
-                # ✅ 拍照完成 → 步进电机雨刮器动作
+                # ✅ Photo taken → Stepper motor wiper operation
                 stepper_wiper_swing(
                     degrees=args.stepper_deg,
                     speed_rps=args.stepper_speed,
@@ -545,16 +543,16 @@ def main():
                 if ng > 0 and buzzer_pin:
                     print("[Main] ⚠️⚠️⚠️ NG detected, starting alarm. ⚠️⚠️⚠️", flush=True)
                     
-                    # ============ 核心修复：每次都重新创建蜂鸣器 ============
+                    # ============ Core fix: Recreate buzzer on each instance ============
                     buzzer_ready = _create_fresh_buzzer(buzzer_pin)
                     
                     if buzzer_ready and _BUZZER is not None:
                         print("[Main] Buzzer ready, starting alarm thread.", flush=True)
                         
-                        # 停止旧报警（如果有）
+                        # Stop old alarms (if any)
                         _alarm_quietly()
                         
-                        # 启动新报警
+                        # Activate new alarm
                         _ALARM_STOP_EVT = threading.Event()
                         _ALARM_THREAD = threading.Thread(
                             target=alarm_continuous_loop,
@@ -564,16 +562,16 @@ def main():
                         _ALARM_THREAD.start()
                         print("🔴 Alarm thread started! You should hear continuous beeping now!", flush=True)
 
-                        # 等待 GUI 发送停止信号
+                        # Waiting for the GUI to send a stop signal
                         wait_enter_from_gui(_ALARM_STOP_EVT)
 
-                        # 收到信号 → 停报警
+                        # Receive signal → Stop alarm
                         _alarm_quietly()
                         print("🔕 Alarm stopped by GUI", flush=True)
                     else:
                         print("⚠️⚠️⚠️ BUZZER NOT AVAILABLE - NO ALARM WILL SOUND ⚠️⚠️⚠️", flush=True)
                 else:
-                    # 无 NG：确保没有残留报警线程
+                    # No NG: Ensures there are no residual alarm threads.
                     _alarm_quietly()
                     if ng == 0:
                         print("✅ All packs passed inspection", flush=True)
