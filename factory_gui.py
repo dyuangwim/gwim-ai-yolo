@@ -2,8 +2,8 @@ import os, sys, json, signal, subprocess, time
 from datetime import datetime
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
 
-# ❌ No longer control the buzzer in the GUI to avoid competing with auto_capture.py for GPIO
-# Only keep placeholders; _failsafe_gpio_off becomes a pure print function
+# ❌ 不再在 GUI 里控制蜂鸣器，避免和 auto_capture.py 抢 GPIO
+# 只保留占位，_failsafe_gpio_off 变成纯打印函数
 SafeBuzzer = None
 
 BATTERY_OPTIONS = [1, 2, 4, 6, 8, 10, 12, 16, 20, 24]
@@ -247,7 +247,7 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         uic.loadUi(os.path.join(os.path.dirname(__file__),"batch_inspector.ui"), self)
         
-        # Style sheet
+        # 样式表
         self.setStyleSheet("""
         QMainWindow{background:#f1f5f9;} QLabel{font-size:14px;} QComboBox,QSpinBox{font-size:14px;}
         QFrame#controlCard,QFrame#stats_card,QFrame#results_card{background:white;border-radius:16px;}
@@ -278,13 +278,13 @@ class MainWindow(QtWidgets.QMainWindow):
         for x in [self.label_stat_expected_unit,self.label_stat_total_unit,self.label_stat_passed_unit,self.label_stat_failed_unit]:
             x.setStyleSheet("color:#9ca3af;")
 
-        # Initialization options
+        # 初始化选项
         self.combo_expected.clear()
         for n in BATTERY_OPTIONS:
             self.combo_expected.addItem(f"{n} Battery" if n==1 else f"{n} Batteries", n)
         self.combo_expected.setCurrentIndex(2)
 
-        # Status variables
+        # 状态变量
         self.proc = None
         self.log_thread = None
         self.total_inspected = 0
@@ -293,7 +293,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.cards_layout = self.findChild(QtWidgets.QGridLayout,"cardsLayout")
         self.alarm_active = False
 
-        # Connect signals
+        # 连接信号
         self.btn_start.clicked.connect(self.start_inspection)
         self.btn_stop.clicked.connect(self.stop_inspection)
         self.btn_stop_alarm.clicked.connect(self.stop_alarm)
@@ -355,14 +355,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.proc = None
             return
             
-        # Log thread
+        # 日志线程
         self.log_thread = LogReaderThread(self.proc, expected)
         self.log_thread.newResult.connect(self.on_new_result)
         self.log_thread.processExited.connect(self.on_process_exited)
         self.log_thread.logMessage.connect(self.on_log_message)
         self.log_thread.start()
         
-        # Update UI
+        # 更新 UI
         self.btn_start.setEnabled(False)
         self.combo_expected.setEnabled(False)
         self.btn_stop.setEnabled(True)
@@ -374,19 +374,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _failsafe_gpio_off(self):
         """
-        Now no longer operate GPIO from the GUI; all buzzer control is handled in auto_capture.py.
-        This function is kept only for logging purposes.
+        现在不再从 GUI 操作 GPIO，所有蜂鸣器控制都在 auto_capture.py 里完成。
+        这里保留函数只是为了 log。
         """
         print("[GUI] Failsafe GPIO off (handled by worker process now)", file=sys.stderr)
 
     def stop_inspection(self):
         print("[GUI] Stop inspection requested", file=sys.stderr)
         
-        # Stop the alarm when it is triggered (you must stop the alarm first).
+        # 报警时禁止 Stop（必须先 Stop Alarm）
         if self.alarm_active:
             QtWidgets.QMessageBox.warning(
                 self, "Alarm active",
-                "Please click 'Stop Alarm' to silence the alarm, then stop the process."
+                "请先点击『Stop Alarm』静音报警，再停止流程。"
             )
             return
 
@@ -400,7 +400,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.log_thread:
                 self.log_thread.stop()
                 
-            # Graceful termination of child processes
+            # 优雅终止子进程
             try:
                 if self.proc.stdin and not self.proc.stdin.closed:
                     print("[GUI] Sending newline to stdin", file=sys.stderr)
@@ -431,7 +431,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     except Exception:
                         pass
             
-            # Now we only print, and no longer directly manipulate GPIO.
+            # 现在只打印，不再直接操作 GPIO
             self._failsafe_gpio_off()
             
         finally:
@@ -581,4 +581,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
