@@ -43,7 +43,7 @@ def capture_from_camera(width=1920, height=1080):
     return cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
 
 
-# ---------- NMS + 卡片过滤 ----------
+# ---------- NMS + Card Filtering ----------
 
 def nms_numpy_local(boxes, scores, iou_thr=0.5, topk=32):
     if len(boxes) == 0:
@@ -88,18 +88,18 @@ def filter_cards(cards, img_w, img_h, min_w=100, min_h=80):
     return [{"xyxy": boxes[i], "conf": scores[i]} for i in keep_idx]
 
 
-# ---------- 只合并重复框，不再限制“最多 expected 个” ----------
+# ---------- Only merge duplicate boxes; the "maximum expected number" limit is no longer applied. ----------
 
 def dedup_batteries(bats, max_keep=None):
     """
-    把同一颗电池的重复框（中心点很接近）合并掉。
-    - 不再用 expected，当作“数量上限”
-    - max_keep 只是一个安全上限（比如 8 / 16），防止极端情况下框太多
+    Merge duplicate battery boxes (boxes with very close center points).
+    - No longer use expected, treat it as a "quantity limit"
+    - max_keep is just a safety limit (e.g., 8 / 16) to prevent too many boxes in extreme cases
     """
     if not bats:
         return []
 
-    # 按置信度从高到低
+    # Arranged by confidence level from highest to lowest
     cand = sorted(bats, key=lambda x: x["conf"], reverse=True)
 
     selected = []
@@ -114,14 +114,14 @@ def dedup_batteries(bats, max_keep=None):
         cy = (by1 + by2) / 2.0
         w  = bx2 - bx1
         h  = by2 - by1
-        radius = min(w, h) * 0.6   # 同一颗电池的“半径”范围
+        radius = min(w, h) * 0.6   # The "radius" range of the same battery
 
         too_close = False
         for (scx, scy, sr) in centers:
             dx = cx - scx
             dy = cy - scy
             dist = (dx*dx + dy*dy) ** 0.5
-            # 如果两个中心距离很近，就认为是同一颗电池的重复框
+            # If the distance between two centers is very small, consider it a duplicate box for the same battery
             if dist < min(radius, sr):
                 too_close = True
                 break
@@ -133,17 +133,17 @@ def dedup_batteries(bats, max_keep=None):
     return selected
 
 
-# ---------- 核心：整图电池 + 卡片内分配 ----------
+# ---------- Core: Full-image Battery Detection + Card-based Assignment ----------
 
 def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector,
                   expected:int, margin:int=6):
     H, W = bgr.shape[:2]
 
-    # 1) 卡片检测 + 过滤
+    # 1) Card Detection + Filtering
     cards_raw = card_det.detect(bgr)
     cards = filter_cards(cards_raw, W, H)
 
-    # 2) 整张图电池检测（和 Colab 一样的调用方式）
+    # 2) Full-image Battery Detection (same calling method as Colab)
     bats_full = bat_det.detect_full(bgr)
 
     vis = bgr.copy()
@@ -157,7 +157,7 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector,
         x2e = min(W-1, x2 + margin)
         y2e = min(H-1, y2 + margin)
 
-        # A. 把中心点落在这个卡片里的电池挑出来
+        # A. Pick out the batteries whose center point falls on this card.
         cand = []
         for b in bats_full:
             bx1, by1, bx2, by2 = b["xyxy"]
@@ -166,7 +166,7 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector,
             if (cx >= x1e) and (cx <= x2e) and (cy >= y1e) and (cy <= y2e):
                 cand.append(b)
 
-        # B. 简单尺寸过滤：太小的假框丢掉
+        # B. Simple size filtering: Discard too small false positives
         bb = []
         for b in cand:
             bx1, by1, bx2, by2 = b["xyxy"]
@@ -174,19 +174,19 @@ def analyze_batch(bgr, card_det:CardDetector, bat_det:BatteryDetector,
             if bw >= 28 and bh >= 28:
                 bb.append(b)
 
-        # C. 合并重复框，但不再限制最多 expected 个
-        #    给一个比较宽松的上限，比如 expected*4（2 粒卡最多 8 个候选）
+        # C. Merge duplicate boxes, but no longer limit the maximum number to expected
+        #    Give a more relaxed upper limit, e.g., expected*4 (2 cards at most 8 candidates)
         bats = dedup_batteries(bb, max_keep=expected * 4 if expected > 0 else None)
         cnt = len(bats)
 
         ok = (cnt == expected)
         color = (0,255,0) if ok else (0,0,255)
 
-        # 画卡片框
+        # draw card frame
         draw_box(vis, (x1, y1, x2, y2),
                  f"pack#{idx} cnt={cnt}/{expected}", color, 3)
 
-        # 画电池框（使用全图坐标）
+        # draw battery boxes (using full-image coordinates)
         for b in bats:
             bx1, by1, bx2, by2 = b["xyxy"]
             draw_box(vis, (bx1, by1, bx2, by2),
@@ -211,15 +211,15 @@ def main():
     ap = argparse.ArgumentParser("Batch Card→Battery Counting (Pi5 + YOLO)")
     ap.add_argument("--card_weights", default="/home/pi/models/card.pt")
     ap.add_argument("--bat_weights",  default="/home/pi/models/battery.pt")
-    ap.add_argument("--img", help="输入图片路径（有则直接处理）")
+    ap.add_argument("--img", help="Input the image path (process directly if available).")
     ap.add_argument("--expected", type=int, required=True,
-                    help="每包应有的电池数量，如 1/2/4/8")
+                    help="The required number of batteries per pack, such as 1/2/4/8")
     ap.add_argument("--rotate", type=int, default=0, choices=[0,90,180,270])
     ap.add_argument("--threads", type=int, default=4)
     ap.add_argument("--card_imgsz", type=int, default=640)
-    ap.add_argument("--bat_imgsz", type=int, default=640)   # 为兼容保留
+    ap.add_argument("--bat_imgsz", type=int, default=640)   # Reserved for compatibility
     ap.add_argument("--card_conf", type=float, default=0.50)
-    ap.add_argument("--bat_conf", type=float, default=None) # None=模型默认 0.25
+    ap.add_argument("--bat_conf", type=float, default=None) # None=Model Default 0.25
     ap.add_argument("--out_dir", default="/home/pi/batch_out")
     ap.add_argument("--save_name", default="auto")
     ap.add_argument("--trigger_pin", type=int, default=None)
@@ -244,19 +244,19 @@ def main():
                                conf=args.bat_conf,
                                threads=args.threads)
 
-    # 读图
+    # Reading the picture
     if args.img:
         bgr = cv2.imread(args.img)
         if bgr is None:
-            raise RuntimeError(f"无法读取图像：{args.img}")
+            raise RuntimeError(f"Unable to read image: {args.img}")
     else:
         if trig is not None:
-            print("⏳ 等待触发信号…")
+            print("⏳ Waiting for trigger signal…")
             trig.wait(fallback_seconds=args.fallback_wait)
         else:
             if args.fallback_wait > 0:
                 time.sleep(args.fallback_wait)
-            print("📸 拍照中…")
+            print("📸 Taking photo…")
         bgr = capture_from_camera()
 
     if args.rotate:
