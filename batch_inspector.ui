@@ -14,7 +14,7 @@
    <string>Battery Package Inspection</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <!-- 整体垂直布局：上面 header，下面左右主内容 -->
+   <!-- Overall vertical layout: header at the top, main content on the left and right below. -->
    <layout class="QVBoxLayout" name="mainVertical">
     <property name="leftMargin">
      <number>16</number>
@@ -31,7 +31,7 @@
     <property name="spacing">
      <number>12</number>
     </property>
-    <!-- 顶部标题 Header -->
+    <!-- Top Header -->
     <item>
      <widget class="QFrame" name="header_frame">
       <property name="frameShape">
@@ -76,7 +76,7 @@
       </layout>
      </widget>
     </item>
-    <!-- 下面是主内容：左控制面板 + 右统计+结果 -->
+    <!-- Main Content: Left Control Panel + Right Statistics + Results -->
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_main">
       <property name="spacing">
