@@ -2,8 +2,8 @@ import os, sys, json, signal, subprocess, time
 from datetime import datetime
 from PyQt5 import QtCore, QtGui, QtWidgets, uic
 
-# ❌ 不再在 GUI 里控制蜂鸣器，避免和 auto_capture.py 抢 GPIO
-# 只保留占位，_failsafe_gpio_off 变成纯打印函数
+# ❌ No longer control the buzzer in the GUI to avoid competing with auto_capture.py for GPIO
+# Only keep placeholders; _failsafe_gpio_off becomes a pure print function
 SafeBuzzer = None
 
 BATTERY_OPTIONS = [1, 2, 4, 6, 8, 10, 12, 16, 20, 24]
@@ -374,19 +374,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _failsafe_gpio_off(self):
         """
-        现在不再从 GUI 操作 GPIO，所有蜂鸣器控制都在 auto_capture.py 里完成。
-        这里保留函数只是为了 log。
+        Now no longer operate GPIO from the GUI; all buzzer control is handled in auto_capture.py.
+        This function is kept only for logging purposes.
         """
         print("[GUI] Failsafe GPIO off (handled by worker process now)", file=sys.stderr)
 
     def stop_inspection(self):
         print("[GUI] Stop inspection requested", file=sys.stderr)
         
-        # 报警时禁止 Stop（必须先 Stop Alarm）
+        # Stop the alarm when it is triggered (you must stop the alarm first).
         if self.alarm_active:
             QtWidgets.QMessageBox.warning(
                 self, "Alarm active",
-                "请先点击『Stop Alarm』静音报警，再停止流程。"
+                "Please click 'Stop Alarm' to silence the alarm, then stop the process."
             )
             return
 
@@ -400,7 +400,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.log_thread:
                 self.log_thread.stop()
                 
-            # 优雅终止子进程
+            # Graceful termination of child processes
             try:
                 if self.proc.stdin and not self.proc.stdin.closed:
                     print("[GUI] Sending newline to stdin", file=sys.stderr)
@@ -431,7 +431,7 @@ class MainWindow(QtWidgets.QMainWindow):
                     except Exception:
                         pass
             
-            # 现在只打印，不再直接操作 GPIO
+            # Now we only print, and no longer directly manipulate GPIO.
             self._failsafe_gpio_off()
             
         finally:
