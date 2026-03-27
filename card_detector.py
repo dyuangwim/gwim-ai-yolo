@@ -27,12 +27,12 @@ def nms_numpy(boxes, scores, iou_thr=0.55, topk=50):
 def _load_ncnn(weights_path:str):
     last_err = None
     if os.path.isdir(weights_path):
-        # 先尝试目录直接加载（有些版本支持）
+        # Try loading the directory directly first (some versions support this).
         try:
             return YOLO(weights_path, task="detect")
         except Exception as e:
             last_err = e
-            # 再尝试常见文件名
+            # Try common filenames again
             for name in ("model.ncnn.param", "best.ncnn.param"):
                 p = os.path.join(weights_path, name)
                 if os.path.exists(p):
@@ -51,7 +51,7 @@ def _load_ncnn(weights_path:str):
                     return YOLO(d, task="detect")
                 except Exception as e2:
                     last_err = e2
-    raise last_err or RuntimeError("无法加载 NCNN 模型")
+    raise last_err or RuntimeError("Unable to load NCNN model")
 
 class CardDetector:
     def __init__(self, weights:str, imgsz:int=640, conf:float=0.50, threads:int=4):
@@ -61,7 +61,7 @@ class CardDetector:
         self.model = _load_ncnn(weights)
         self.imgsz = int(imgsz)
         self.conf = float(conf)
-        # 预热
+        # preheating
         _ = self.model.predict(
             source=np.zeros((self.imgsz, self.imgsz, 3), np.uint8),
             imgsz=self.imgsz, conf=self.conf, verbose=False
@@ -76,7 +76,7 @@ class CardDetector:
         if r.boxes is not None and len(r.boxes)>0:
             boxes = r.boxes.xyxy.cpu().numpy()
             confs = (r.boxes.conf if r.boxes.conf is not None else np.zeros((len(boxes),1))).cpu().numpy().reshape(-1)
-            # 永远做一次本地 NMS，不再用 len(boxes)>100 的条件
+            # Perform local NMS only once, and never use the condition len(boxes)>100 again.
             keep = nms_numpy(boxes, confs, iou_thr=0.55, topk=20)
             for i in keep:
                 x1,y1,x2,y2 = map(int, boxes[i].tolist())
